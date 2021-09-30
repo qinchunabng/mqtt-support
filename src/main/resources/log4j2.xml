@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="info" monitorInterval="30" packages="com.citic.asp.cmc.log">
+    <!--全局参数 -->
+    <Properties>
+        <!-- 服务应用名，根据实际情况修改 -->
+        <Property name="springAppName" value="mqtt-support" />
+
+        <Property name="baseFolder" value="../logs/${springAppName}/" />
+        <!-- 应用日志输出文件夹 -->
+        <Property name="cherryFolder" value="${baseFolder}/${springAppName}" />
+        <!-- 接口详细日志，对应全日志的详细日志 -->
+        <Property name="apiLogFile" value="${baseFolder}/api/${springAppName}" />
+
+        <Property name="consoleLogPattern" value="%d{yyyy-MM-dd HH:mm:ss,SSS} [%t] %-5p %c{1}:%L -%m%n" />
+
+        <Property name="fileSize" value="100MB" />
+        <Property name="fileAmount" value="20" />
+    </Properties>
+
+    <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <!-- 设置日志输出的格式 -->
+            <PatternLayout pattern="${consoleLogPattern}"/>
+            <Filters>
+                <ThresholdFilter level="ERROR" />
+            </Filters>
+        </Console>
+        <!-- 这个会打印出所有的info及以下级别的信息，每次大小超过size，则会生成新的文件记录日志 -->
+        <RollingFile name="RollingFileInfo" fileName="${cherryFolder}.log"
+            filePattern="${cherryFolder}-%d{yyyy-MM-dd}-%i.log">
+            <Filters>
+                <ThresholdFilter level="ERROR" />
+            </Filters>
+            <PatternLayout pattern="${consoleLogPattern}"/>
+            <Policies>
+                <!--按天进行分割日志 -->
+                <TimeBasedTriggeringPolicy />
+                <!--按文件占用空间进行分割日志 -->
+                <SizeBasedTriggeringPolicy size="${fileSize}" />
+            </Policies>
+            <!-- 如果不做配置，默认是7，这个7指的是上面i的最大值，超过了就会覆盖之前的，这里设置了20 -->
+            <DefaultRolloverStrategy max="${fileAmount}" />
+        </RollingFile>
+
+        <RollingFile name="apiLoggerAppender" fileName="${apiLogFile}.log"
+                     filePattern="${apiLogFile}-%d{yyyy-MM-dd}-%i.log">
+            <Filters>
+                <ThresholdFilter level="INFO" />
+            </Filters>
+            <PatternLayout pattern="${consoleLogPattern}" />
+            <Policies>
+                <TimeBasedTriggeringPolicy />
+                <SizeBasedTriggeringPolicy size="${fileSize}" />
+            </Policies>
+            <DefaultRolloverStrategy max="${fileAmount}" />
+        </RollingFile>
+    </Appenders>
+
+
+    <!--然后定义logger，只有定义了logger并引入的appender，appender才会生效 -->
+    <Loggers>
+        <Root level="ERROR">
+            <AppenderRef ref="Console" />
+<!--            <AppenderRef ref="RollingFileInfo"/>-->
+        </Root>
+
+<!--        <Logger name="apiLogger" level="info" additivity="false">-->
+<!--            <AppenderRef ref="apiLoggerAppender" />-->
+<!--        </Logger>-->
+
+    </Loggers>
+</Configuration>
