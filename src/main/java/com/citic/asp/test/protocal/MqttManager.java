@@ -1,6 +1,9 @@
 package com.citic.asp.test.protocal;
 
+import com.citic.asp.cmc.core.message.CherryMessage;
 import org.tio.core.ChannelContext;
+
+import java.io.IOException;
 
 /**
  *
@@ -47,4 +50,12 @@ public interface MqttManager extends MessageSender, MessageReceiver{
      * @return
      */
     String getSessionKey(String host, int port, String userId, String deviceId);
+
+    /**
+     * 接收消息
+     * @param cherryMessage
+     * @param channelContext 连接上下文
+     * @return
+     */
+    void receive(CherryMessage cherryMessage, ChannelContext channelContext) throws IOException;
 }

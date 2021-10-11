@@ -1,5 +1,9 @@
 package com.citic.asp.test.sampler;
 
+import com.citic.asp.cmc.core.message.CherryMessage;
+import com.citic.asp.test.protocal.MqttManager;
+import com.citic.asp.test.protocal.MqttManagerImpl;
+import com.citic.asp.test.protocal.MqttSession;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.jmeter.config.Arguments;
 import org.apache.jmeter.protocol.java.sampler.JavaSamplerContext;
@@ -31,6 +35,8 @@ public class MqttReceiverSampler extends AbstractMqttSampler{
 
     private static final String PARAMETER_TO_DEVICE_TYPE = "to_device_type";
 
+    private MqttManager mqttManager = MqttManagerImpl.getInstance();
+
     @Override
     public SampleResult runTest(JavaSamplerContext context) {
         MqttConfig mqttConfig = getMqttConfig();
@@ -43,37 +49,28 @@ public class MqttReceiverSampler extends AbstractMqttSampler{
         int receiveTimeout = Integer.valueOf(context.getParameter(PARAMETER_RECEIVE_TIMEOUT, "3000"));
 
         //获取连接上下文
-        String socketKey = getSocketKey(toUser, toDevice);
-        log.info("=========== 当前socketKey:{}, toUser:{}, toDevice:{}", socketKey, toUser, toDevice);
-        Socket socket = getSocket(socketKey);
+        //获取socket连接
+        log.info("=========== 当前 toUser:{}, toDevice:{}, deviceType:{}", toUser, toDevice, deviceType);
+        MqttSession session = mqttManager.getConnection(mqttConfig.getHost(), mqttConfig.getPort(),mqttConfig.getConnectTimeout(), mqttConfig.getServiceId(),
+                toUser, toDevice, deviceType, mqttConfig.getEncryptKey(), mqttConfig.isNeedLogin());
         SampleResult result = newSampleResult();
-        sampleResultStart(result, null);
-        if(socket == null){
+        sampleResultStart(result, getMessage());
+        if(session == null){
             sampleResultFailed(result, "500", getError());
-            return result;
-        }
-        try {
-            socket.setSoTimeout(receiveTimeout);
-        } catch (SocketException e) {
-            log.error("设置超时时间异常", e);
-            sampleResultFailed(result, "500", e);
             return result;
         }
 
         if(StringUtils.isNotEmpty(toUser)){
             try{
-                InputStream is = socket.getInputStream();
-                byte[] data = receiver.receive(is);
-                String response = Hex.toHexString(data);
-                sampleResultSuccess(result, response);
+                CherryMessage message = receiver.receive(session, receiveTimeout);
+                if(message == null){
+                    sampleResultFailed(result, "504", new RuntimeException("接收消息超时"));
+                }else{
+                    sampleResultSuccess(result, message.toString());
+                }
             }catch (Exception e){
                 log.error("Receive message error", e);
-                if(e instanceof SocketTimeoutException){
-                    //超时
-                    sampleResultFailed(result, "504", e);
-                }else{
-                    sampleResultFailed(result, "500", e);
-                }
+                sampleResultFailed(result, "500", e);
             }
         }else{
             sampleResultFailed(result, "500", new RuntimeException("发送人或接收人为空"));

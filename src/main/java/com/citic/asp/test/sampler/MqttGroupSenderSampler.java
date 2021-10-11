@@ -3,19 +3,13 @@ package com.citic.asp.test.sampler;
 import com.alibaba.fastjson.JSON;
 import com.citic.asp.test.protocal.GroupMessage;
 import com.citic.asp.test.protocal.MessageType;
+import com.citic.asp.test.protocal.MqttSession;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.jmeter.config.Arguments;
 import org.apache.jmeter.protocol.java.sampler.JavaSamplerContext;
 import org.apache.jmeter.samplers.SampleResult;
-import org.bouncycastle.util.encoders.Hex;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.Socket;
-import java.net.SocketException;
-import java.net.SocketTimeoutException;
 
 /**
  * mqtt群消息sampler
@@ -71,20 +65,13 @@ public class MqttGroupSenderSampler extends AbstractMqttSampler{
         boolean waitResponse = Boolean.parseBoolean(context.getParameter(PARAMETER_WAIT_RESPONSE, "true"));
 
         //获取socket连接
-        String socketKey = getSocketKey(fromUser, fromDevice);
-        log.info("=========== 当前socketKey:{}, groupId:{}", socketKey, groupId);
-        Socket socket = getSocket(socketKey);
+        log.info("=========== 当前fromUser:{}, fromDevice:{}, fromDeviceType:{}, groupId:{}", fromUser, fromDevice, fromDeviceType, groupId);
+        MqttSession session = mqttManager.getConnection(mqttConfig.getHost(), mqttConfig.getPort(),mqttConfig.getConnectTimeout(), mqttConfig.getServiceId(),
+                fromUser, fromDevice, fromDeviceType, mqttConfig.getEncryptKey(), mqttConfig.isNeedLogin());
         SampleResult result = newSampleResult();
         sampleResultStart(result, getMessage());
-        if(socket == null){
+        if(session == null){
             sampleResultFailed(result, "500", getError());
-            return result;
-        }
-        try {
-            socket.setSoTimeout(sendTimeout);
-        } catch (SocketException e) {
-            log.error("设置超时时间异常", e);
-            sampleResultFailed(result, "500", e);
             return result;
         }
 
@@ -99,25 +86,16 @@ public class MqttGroupSenderSampler extends AbstractMqttSampler{
                     .build();
             String message = JSON.toJSONString(groupMessage);
             try{
-                OutputStream os = socket.getOutputStream();
-                sender.sendGroupMessage(message, mqttConfig.getServiceId(), groupId, os, mqttConfig.getEncryptKey());
-                //判断是否等待消息回执
-                if(waitResponse){
-                    InputStream is = socket.getInputStream();
-                    byte[] data = receiver.receive(is);
-                    String response = Hex.toHexString(data);
-                    sampleResultSuccess(result, response);
+                boolean success = sender.sendGroupMessage(message, mqttConfig.getServiceId(), groupId, session.getChannelContext(), mqttConfig.getEncryptKey(), waitResponse, sendTimeout);
+                //判断是否发送成功
+                if(success){
+                    sampleResultSuccess(result, "OK");
                 }else{
-                    sampleResultSuccess(result, "");
+                    sampleResultFailed(result, "504", new RuntimeException("等待消息回执超时"));
                 }
             }catch (Exception e){
                 log.error("Send group message error", e);
-                if(e instanceof SocketTimeoutException){
-                    //超时
-                    sampleResultFailed(result, "504", e);
-                }else{
-                    sampleResultFailed(result, "500", e);
-                }
+                sampleResultFailed(result, "500", e);
             }
         }else{
             sampleResultFailed(result, "500", new RuntimeException("发送人或群ID为空"));

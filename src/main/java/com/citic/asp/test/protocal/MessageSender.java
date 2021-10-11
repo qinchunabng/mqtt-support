@@ -41,7 +41,7 @@ public interface MessageSender extends BaseOperation{
      * @return 如果waitResponse为true，即需要等待服务器返回消息回执，收到服务器的消息回执返回为true，超过指定的等待时间没有收到消息回执返回false
      *         如果waitResponse为false，默认返回true
      */
-    void sendSingleMessage(String message, String serviceId, String toUser, ChannelContext channelContext, String encryptKey, boolean waitResponse, int sendTimeout) throws IOException;
+    boolean sendSingleMessage(String message, String serviceId, String toUser, ChannelContext channelContext, String encryptKey, boolean waitResponse, int sendTimeout) throws IOException;
 
     /**
      * 发送设备消息
@@ -65,7 +65,7 @@ public interface MessageSender extends BaseOperation{
      * @return 如果waitResponse为true，即需要等待服务器返回消息回执，收到服务器的消息回执返回为true，超过指定的等待时间没有收到消息回执返回false
      *         如果waitResponse为false，默认返回true
      */
-    void sendGroupMessage(String message, String serviceId, String groupId, ChannelContext channelContext, String encryptKey, boolean waitResponse, int sendTimeout) throws IOException;
+    boolean sendGroupMessage(String message, String serviceId, String groupId, ChannelContext channelContext, String encryptKey, boolean waitResponse, int sendTimeout) throws IOException;
 
     /**
      * 认证

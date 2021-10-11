@@ -2,6 +2,7 @@ package com.citic.asp.test.sampler;
 
 import com.citic.asp.test.protocal.MessageReceiver;
 import com.citic.asp.test.protocal.MessageSender;
+import com.citic.asp.test.protocal.MqttManager;
 import com.citic.asp.test.protocal.MqttManagerImpl;
 import org.apache.jmeter.config.Arguments;
 import org.apache.jmeter.protocol.java.sampler.AbstractJavaSamplerClient;
@@ -125,6 +126,8 @@ public abstract class AbstractMqttSampler extends AbstractJavaSamplerClient {
 
     protected MessageReceiver receiver = MqttManagerImpl.getInstance();
 
+    protected MqttManager mqttManager = MqttManagerImpl.getInstance();
+
     private static final ThreadLocal<Map<String, Object>> tp =
             ThreadLocal.withInitial(HashMap::new);
 
@@ -138,108 +141,18 @@ public abstract class AbstractMqttSampler extends AbstractJavaSamplerClient {
 
     @Override
     public void setupTest(JavaSamplerContext context) {
-//        init();
         mqttConfig = loadConfig(context);
         log.info("######### Setup Test. Current Thread:{}, MqttConfig:{}", Thread.currentThread().getName(), mqttConfig);
     }
 
-    private void init(){
-        if(first){
-            log.info("######## 初始化心跳定时任务");
-            first = false;
-            executorService.scheduleAtFixedRate(() -> {
-                for(Map.Entry<String, Socket> entry : SOCKET_MAP.entrySet()){
-                    try{
-                        sender.sendPing(entry.getValue().getOutputStream());
-                    }catch (Exception e){
-                        log.error("========> 发送心跳消息异常,socketKey:" + entry.getKey(), e);
-                    }
-                }
-            }, 1, 3, TimeUnit.SECONDS);
-        }
-    }
-
-    /**
-     * 获取socket连接
-     * @param socketKey
-     * @return
-     */
-    protected Socket getSocket(String socketKey){
-        Socket socket = SOCKET_MAP.computeIfAbsent(socketKey, key -> {
-            Socket sock = new Socket();
-            try {
-                connect(sock);
-                //心跳定时任务
-                executorService.scheduleAtFixedRate(() -> {
-                    try{
-                        if(sock != null){
-                            if(sock.isConnected() && !sock.isClosed()){
-                                sender.sendPing(sock.getOutputStream());
-                            }else{
-                                connect(sock);
-                            }
-                        }
-                    }catch (Exception e){
-                        log.error("========> 发送心跳消息或者重连错误,socketKey:" + socketKey, e);
-                    }
-                }, 1, 3, TimeUnit.SECONDS);
-                Set<String> userDevices = USER_MAP.computeIfAbsent(getUser(), k -> new CopyOnWriteArraySet<>());
-                userDevices.add(getDevice());
-            } catch (IOException e) {
-                log.error("创建socket连接异常,socketKey:{}", socketKey , e);
-                tp.get().put(ERRKEY, e);
-                return null;
-            }
-            return sock;
-        });
-
-        try {
-            connect(socket);
-        } catch (IOException e) {
-            log.error("socket重新连接异常,socketKey:{}", socketKey , e);
-            tp.get().put(ERRKEY, e);
-            return null;
-        }
-
-        return socket;
-    }
-
-    public void doConnect(Socket socket) throws IOException {
-        SocketAddress sockaddr = new InetSocketAddress(mqttConfig.getHost(), mqttConfig.getPort());
-        socket.connect(sockaddr, mqttConfig.getConnectTimeout());
-        OutputStream os = socket.getOutputStream();
-        //认证&上线操作
-        sender.auth(mqttConfig.getServiceId(), getDevice(), getDeviceType(), mqttConfig.getEncryptKey(), os);
-        if (mqttConfig.isNeedLogin()) {
-            sender.online(mqttConfig.getServiceId(), getUser(), os);
-        }
-    }
-
-    private void connect(Socket socket) throws IOException {
-        if(socket != null){
-            boolean available = socket.isConnected() && !socket.isClosed();
-            log.info("========> device:{}对应的socket是否可用:{}", getDevice(), available);
-            if(!available){
-                synchronized (socket) {
-                    available = socket.isConnected() && !socket.isClosed();
-                    if(available){
-                        return;
-                    }
-                    doConnect(socket);
-                }
-            }
-        }
-
-    }
-
-    /**
-     * 获取socket key
-     * @param username
-     * @return
-     */
-    protected String getSocketKey(String username, String deviceId){
-        return TCPKEY+"#" + mqttConfig.getHost()+"#"+mqttConfig.getPort()+"#"+username+"#"+deviceId;
-    }
+//    /**
+//     * 获取socket key
+//     * @param username
+//     * @return
+//     */
+//    protected String getSocketKey(String username, String deviceId){
+//        return TCPKEY+"#" + mqttConfig.getHost()+"#"+mqttConfig.getPort()+"#"+username+"#"+deviceId;
+//    }
 
     protected Exception getError(){
         Map<String, Object> cp = tp.get();

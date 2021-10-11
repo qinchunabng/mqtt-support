@@ -76,6 +76,10 @@ public class MqttManagerImpl implements MqttManager{
      * 保存消息回执CountDownLatch
      */
     private static final Map<Long, CountDownLatch> WAIT_MAP = new ConcurrentHashMap<>();
+    /**
+     * 缓存加密字符串
+     */
+    private static final Map<String, String> ENCRYPT_MAP = new ConcurrentHashMap<>();
 
     private static final ClientTioConfig clientTioConfig = new ClientTioConfig(new CmcClientAioHandler(),
             new CmcClientAioListener(), new ReconnConf(5000L, 3));
@@ -177,8 +181,8 @@ public class MqttManagerImpl implements MqttManager{
      * @param channelContext 连接上下文
      */
     @Override
-    public void sendSingleMessage(String message, String serviceId, String toUser, ChannelContext channelContext, String encryptKey,boolean waitResponse, int sendTimeout) throws IOException {
-        send(message, ImPayloadType.SINGLE_CHAT.getCode(), channelContext, String.format(USER_MESSAGE_TOPIC, serviceId, toUser), encryptKey, waitResponse, sendTimeout);
+    public boolean sendSingleMessage(String message, String serviceId, String toUser, ChannelContext channelContext, String encryptKey,boolean waitResponse, int sendTimeout) throws IOException {
+        return send(message, ImPayloadType.SINGLE_CHAT.getCode(), channelContext, String.format(USER_MESSAGE_TOPIC, serviceId, toUser), encryptKey, waitResponse, sendTimeout);
     }
 
     /**
@@ -203,8 +207,8 @@ public class MqttManagerImpl implements MqttManager{
      * @param encryptKey 加密key
      */
     @Override
-    public void sendGroupMessage(String message, String serviceId, String groupId, ChannelContext channelContext, String encryptKey,boolean waitResponse, int sendTimeout) throws IOException {
-        send(message, ImPayloadType.GROUP_CHAT.getCode(), channelContext, String.format(GROUP_MESSAGE_TOPIC, serviceId, groupId), encryptKey, waitResponse, sendTimeout);
+    public boolean sendGroupMessage(String message, String serviceId, String groupId, ChannelContext channelContext, String encryptKey,boolean waitResponse, int sendTimeout) throws IOException {
+        return send(message, ImPayloadType.GROUP_CHAT.getCode(), channelContext, String.format(GROUP_MESSAGE_TOPIC, serviceId, groupId), encryptKey, waitResponse, sendTimeout);
     }
 
     /**
@@ -271,7 +275,7 @@ public class MqttManagerImpl implements MqttManager{
 
     /**
      * 接收消息
-     * @param cherryMessage
+     * @param message
      * @param channelContext 连接上下文
      * @return
      */
@@ -280,6 +284,7 @@ public class MqttManagerImpl implements MqttManager{
         if (message.getCherryMessageType() == CherryMessageType.PUBLISH){
             //将消息放入到对应的连接会话的队列中
             String sessionKey = getSessionKey(channelContext);
+            String secretKey = null;
             if(sessionKey != null){
                 MqttSession mqttSession = SESSION_MAP.get(sessionKey);
                 if(mqttSession != null){
@@ -299,24 +304,26 @@ public class MqttManagerImpl implements MqttManager{
                 ImPayloadFactory imPayloadFactory = new ImPayloadFactory();
                 if(payloadType == ImPayloadType.SINGLE_CHAT){
                     //单聊消息
-                    //消息内容解析
-                    String decryptData = new String(SecurityTool.decryptSymmetricData(2, cherryMessagePayload.getBody(),
-                            SecurityTool.getCommonKey(2)));
-                    if(StringUtils.isEmpty(decryptData)){
-                        return;
-                    }
-                    SingleMessage singleMessage = JSON.parseObject(decryptData, SingleMessage.class);
-                    //收到单聊消息
-                    log.info("########## 单聊消息ID:{},消息内容:{}", messageId, singleMessage);
                     //单聊发送单聊已读回执
-                    try {
-                        CherryMessagePayload singleReceiptPayload = imPayloadFactory.createPayload(messageId, ImPayloadType.RECEIPT_SINGLE, getReceiptData(ImReceiptStatus.RECEIVE.getCode()), System.currentTimeMillis());
-                        sendMessage(String.format(USER_MESSAGE_TOPIC, singleMessage.getServiceId(), singleMessage.getFromUser()), singleReceiptPayload, channelContext);
-                        log.info(">>>>>>>>>> 收到单聊消息，messageId:{},消息内容：{}", messageId, singleMessage);
-                    }catch (Exception e) {
-                        log.error("发送单聊已读回执失败", e);
-                    }
-
+//                    CherryMessageTopicCodec topicCodec = new CmcTopicCodec();
+//                    CherryMessageTopic topic = topicCodec.decode(message.getTopics().stream().findAny().get());
+//                    try {
+//                        CherryMessagePayload singleReceiptPayload = imPayloadFactory.createPayload(messageId, ImPayloadType.RECEIPT_SINGLE, getReceiptData(ImReceiptStatus.RECEIVE.getCode()), System.currentTimeMillis());
+//                        sendMessage(String.format(USER_MESSAGE_TOPIC, message.getServiceId(), singleMessage.getFromUser()), singleReceiptPayload, channelContext);
+//                    }catch (Exception e) {
+//                        log.error("发送单聊已读回执失败", e);
+//                    }
+                    //消息内容解析
+//                    if(secretKey == null){
+//                        return;
+//                    }
+//                    String decryptData = new String(SM4Util.decryptCBC(secretKey, cherryMessagePayload.getBody());
+//                    if(StringUtils.isEmpty(decryptData)){
+//                        return;
+//                    }
+//                    SingleMessage singleMessage = JSON.parseObject(decryptData, SingleMessage.class);
+//                    //收到单聊消息
+//                    log.info("########## 单聊消息ID:{},消息内容:{}", messageId, singleMessage);
                 }else if(payloadType == ImPayloadType.RECEIPT_SINGLE || payloadType == ImPayloadType.RECEIPT_GROUP){
                     //收到系统回执消息，唤醒发送消息的线程
                     log.debug(">>>>>>>>>>>>>> 收到单聊系统回执消息,messageId:{}", messageId);
@@ -327,22 +334,24 @@ public class MqttManagerImpl implements MqttManager{
                 }else if(payloadType == ImPayloadType.GROUP_CHAT){
                     //群消息
                     //消息内容解析
-                    String decryptData = new String(SecurityTool.decryptSymmetricData(2, cherryMessagePayload.getBody(),
-                            SecurityTool.getCommonKey(2)));
-                    if(StringUtils.isEmpty(decryptData)){
-                        return;
-                    }
-                    GroupMessage groupMessage = JSON.parseObject(decryptData, GroupMessage.class);
-                    //收到群聊消息
-                    log.info("########## 群聊消息ID:{},消息内容:{}", messageId, groupMessage);
-                    //单聊发送群聊已读回执
-                    try {
-                        CherryMessagePayload groupReceiptPayload = imPayloadFactory.createPayload(messageId, ImPayloadType.RECEIPT_GROUP, getReceiptData(ImReceiptStatus.RECEIVE.getCode()), System.currentTimeMillis());
-                        sendMessage(String.format(GROUP_MESSAGE_TOPIC, groupMessage.getServiceId(), groupMessage.getGroupId()), groupReceiptPayload, channelContext);
-                        log.info(">>>>>>>>>> 收到群聊消息，messageId:{},消息内容：{}", messageId, groupMessage);
-                    }catch (Exception e) {
-                        log.error("发送群聊已读回执失败", e);
-                    }
+//                    if(secretKey == null){
+//                        return;
+//                    }
+//                    String decryptData = new String(SM4Util.decryptCBC(secretKey, cherryMessagePayload.getBody());
+//                    if(StringUtils.isEmpty(decryptData)){
+//                        return;
+//                    }
+//                    GroupMessage groupMessage = JSON.parseObject(decryptData, GroupMessage.class);
+//                    //收到群聊消息
+//                    log.info("########## 群聊消息ID:{},消息内容:{}", messageId, groupMessage);
+//                    //单聊发送群聊已读回执
+//                    try {
+//                        CherryMessagePayload groupReceiptPayload = imPayloadFactory.createPayload(messageId, ImPayloadType.RECEIPT_GROUP, getReceiptData(ImReceiptStatus.RECEIVE.getCode()), System.currentTimeMillis());
+//                        sendMessage(String.format(GROUP_MESSAGE_TOPIC, groupMessage.getServiceId(), groupMessage.getGroupId()), groupReceiptPayload, channelContext);
+//                        log.info(">>>>>>>>>> 收到群聊消息，messageId:{},消息内容：{}", messageId, groupMessage);
+//                    }catch (Exception e) {
+//                        log.error("发送群聊已读回执失败", e);
+//                    }
                 }
             }
         }
@@ -356,6 +365,25 @@ public class MqttManagerImpl implements MqttManager{
 //    public void sendPing(OutputStream os) throws IOException {
 //        sendMessage(MqttMessageFactory.createPingMsg(), os);
 //    }
+
+    /**
+     * 接收消息
+     * @param mqttSession 连接会话
+     * @param readTimeout 读超时时间
+     * @return
+     */
+    @Override
+    public CherryMessage receive(MqttSession mqttSession, int readTimeout){
+        if(mqttSession == null || mqttSession.getMessageQueue() == null){
+            return null;
+        }
+        try {
+            return (CherryMessage) mqttSession.getMessageQueue().poll(readTimeout, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            log.error("接收消息异常", e);
+            return null;
+        }
+    }
 
     /**
      * 创建连接
@@ -391,7 +419,7 @@ public class MqttManagerImpl implements MqttManager{
                 if(needLogin){
                     online(serviceId, userId, channelContext);
                 }
-                return new MqttSession(channelContext, new LinkedBlockingDeque());
+                return new MqttSession(channelContext, new LinkedBlockingDeque(), encryptKey);
             } catch (Exception e) {
                 log.error("获取连接失败, userId:"+ userId + ",deviceId:" + deviceId, e);
                 return null;

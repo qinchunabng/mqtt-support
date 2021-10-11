@@ -17,9 +17,10 @@ public class MqttSession implements Serializable {
     public MqttSession() {
     }
 
-    public MqttSession(ChannelContext channelContext, BlockingDeque messageQueue) {
+    public MqttSession(ChannelContext channelContext, BlockingDeque messageQueue, String secretKey) {
         this.channelContext = channelContext;
         this.messageQueue = messageQueue;
+        this.secretKey = secretKey;
     }
 
     /**
@@ -31,6 +32,11 @@ public class MqttSession implements Serializable {
      * 保存收到的消息
      */
     private BlockingDeque messageQueue;
+
+    /**
+     * 密钥
+     */
+    private String secretKey;
 
     public ChannelContext getChannelContext() {
         return channelContext;
@@ -46,5 +52,13 @@ public class MqttSession implements Serializable {
 
     public void setMessageQueue(BlockingDeque messageQueue) {
         this.messageQueue = messageQueue;
+    }
+
+    public String getSecretKey() {
+        return secretKey;
+    }
+
+    public void setSecretKey(String secretKey) {
+        this.secretKey = secretKey;
     }
 }

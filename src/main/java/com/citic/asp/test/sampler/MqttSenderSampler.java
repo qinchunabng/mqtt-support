@@ -1,22 +1,13 @@
 package com.citic.asp.test.sampler;
 
 import com.alibaba.fastjson.JSON;
-import com.citic.asp.test.protocal.MessageType;
-import com.citic.asp.test.protocal.SingleMessage;
+import com.citic.asp.test.protocal.*;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.jmeter.config.Arguments;
 import org.apache.jmeter.protocol.java.sampler.JavaSamplerContext;
 import org.apache.jmeter.samplers.SampleResult;
-import org.bouncycastle.util.encoders.Hex;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.Socket;
-import java.net.SocketException;
-import java.net.SocketTimeoutException;
-import java.util.concurrent.TimeUnit;
 
 /**
  * MQTT发送消息Sampler
@@ -82,23 +73,18 @@ public class MqttSenderSampler extends AbstractMqttSampler {
         boolean waitResponse = Boolean.parseBoolean(context.getParameter(PARAMETER_WAIT_RESPONSE, "true"));
         boolean sendDeviceMessage = Boolean.valueOf(context.getParameter(PARAMETER_SEND_DEVICE_MSG, "false"));
 
+
         //获取socket连接
-        String socketKey = getSocketKey(fromUser, fromDevice);
-        log.info("=========== 当前socketKey:{}, toUser:{}, toDevice:{}", socketKey, toUser, toDevice);
-        Socket socket = getSocket(socketKey);
+        log.info("=========== 当前fromUser:{}, fromDevice:{}, fromDeviceType:{}, toUser:{}, toDevice:{}", fromUser, fromDevice, fromDeviceType, toUser, toDevice);
+        MqttSession session = mqttManager.getConnection(mqttConfig.getHost(), mqttConfig.getPort(),mqttConfig.getConnectTimeout(), mqttConfig.getServiceId(),
+                fromUser, fromDevice, fromDeviceType, mqttConfig.getEncryptKey(), mqttConfig.isNeedLogin());
         SampleResult result = newSampleResult();
         sampleResultStart(result, getMessage());
-        if(socket == null){
+        if(session == null){
             sampleResultFailed(result, "500", getError());
             return result;
         }
-        try {
-            socket.setSoTimeout(sendTimeout);
-        } catch (SocketException e) {
-            log.error("设置超时时间异常", e);
-            sampleResultFailed(result, "500", e);
-            return result;
-        }
+
         if(StringUtils.isNotEmpty(fromUser) || StringUtils.isNotEmpty(toUser)){
             SingleMessage singleMessage = new SingleMessage.Builder()
                     .messageType(MessageType.TEXT.getCode())
@@ -109,32 +95,25 @@ public class MqttSenderSampler extends AbstractMqttSampler {
                     .build();
             String message = JSON.toJSONString(singleMessage);
             try{
-                OutputStream os = socket.getOutputStream();
 //                TimeUnit.MILLISECONDS.sleep(50);
                 //判断是否发设备消息
+                boolean success = true;
                 if(sendDeviceMessage){
-                    sender.sendDeviceMessage(message, mqttConfig.getServiceId(), toDevice, os, mqttConfig.getEncryptKey());
+                    sender.sendDeviceMessage(message, mqttConfig.getServiceId(), toDevice, session.getChannelContext(), mqttConfig.getEncryptKey());
                 }else{
-                    sender.sendSingleMessage(message, mqttConfig.getServiceId(), toUser, os, mqttConfig.getEncryptKey());
+                    success = sender.sendSingleMessage(message, mqttConfig.getServiceId(), toUser, session.getChannelContext(), mqttConfig.getEncryptKey(), waitResponse, sendTimeout);
                 }
 
-                //判断是否等待消息回执
-                if(waitResponse){
-                    InputStream is = socket.getInputStream();
-                    byte[] data = receiver.receive(is);
-                    String response = Hex.toHexString(data);
-                    sampleResultSuccess(result, response);
+                //判断消息是否发送成功
+                if(success){
+                    sampleResultSuccess(result, "OK");
                 }else{
-                    sampleResultSuccess(result, "");
+                    //没有收到消息回执，发送超时
+                    sampleResultFailed(result, "504",  new RuntimeException("等待消息回执超时"));
                 }
             }catch (Exception e){
                 log.error("Send single message error", e);
-                if(e instanceof SocketTimeoutException){
-                    //超时
-                    sampleResultFailed(result, "504", e);
-                }else{
-                    sampleResultFailed(result, "500", e);
-                }
+                sampleResultFailed(result, "500", e);
             }
         }else{
             sampleResultFailed(result, "500", new RuntimeException("发送人或接收人为空"));
