@@ -19,10 +19,11 @@ import java.nio.charset.StandardCharsets;
 
 /**
  * MQTT基本操作
- *
+ * 已过时，使用{@link BaseOperation}代替
  * @author qcb
  * @date 2021/04/20 10:53.
  */
+@Deprecated
 public abstract class BaseMqttOperation {
 
     private final static Logger log = LoggerFactory.getLogger(BaseMqttOperation.class);

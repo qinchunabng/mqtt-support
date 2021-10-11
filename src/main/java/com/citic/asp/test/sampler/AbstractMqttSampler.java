@@ -2,7 +2,7 @@ package com.citic.asp.test.sampler;
 
 import com.citic.asp.test.protocal.MessageReceiver;
 import com.citic.asp.test.protocal.MessageSender;
-import com.citic.asp.test.protocal.MqttManager;
+import com.citic.asp.test.protocal.MqttManagerImpl;
 import org.apache.jmeter.config.Arguments;
 import org.apache.jmeter.protocol.java.sampler.AbstractJavaSamplerClient;
 import org.apache.jmeter.protocol.java.sampler.JavaSamplerContext;
@@ -18,7 +18,6 @@ import java.io.StringWriter;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
-import java.net.SocketException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -122,9 +121,9 @@ public abstract class AbstractMqttSampler extends AbstractJavaSamplerClient {
      */
     private MqttConfig mqttConfig;
 
-    protected MessageSender sender = MqttManager.getInstance();
+    protected MessageSender sender = MqttManagerImpl.getInstance();
 
-    protected MessageReceiver receiver = MqttManager.getInstance();
+    protected MessageReceiver receiver = MqttManagerImpl.getInstance();
 
     private static final ThreadLocal<Map<String, Object>> tp =
             ThreadLocal.withInitial(HashMap::new);

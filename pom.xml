@@ -38,6 +38,12 @@
         </dependency>
 
         <dependency>
+            <groupId>com.citic.asp</groupId>
+            <artifactId>cmc-sdk-core</artifactId>
+            <version>${cmc-sdk.version}</version>
+        </dependency>
+
+        <dependency>
             <groupId>org.t-io</groupId>
             <artifactId>tio-core</artifactId>
         </dependency>
