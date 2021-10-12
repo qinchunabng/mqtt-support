@@ -50,8 +50,12 @@ public interface MessageSender extends BaseOperation{
      * @param toDevice 接收设备ID
      * @param channelContext 连接上下文
      * @param encryptKey 加密密钥
+     * @param waitResponse 是否等待回执
+     * @param sendTimeout 发送超时时间
+     * @return 如果waitResponse为true，即需要等待服务器返回消息回执，收到服务器的消息回执返回为true，超过指定的等待时间没有收到消息回执返回false
+     *         如果waitResponse为false，默认返回true
      */
-    void sendDeviceMessage(String message, String serviceId, String toDevice, ChannelContext channelContext, String encryptKey) throws IOException;
+    boolean sendDeviceMessage(String message, String serviceId, String toDevice, ChannelContext channelContext, String encryptKey, boolean waitResponse, int sendTimeout) throws IOException;
 
     /**
      * 发送群聊消息

@@ -1,6 +1,7 @@
 package com.citic.asp.test.sampler;
 
 import com.alibaba.fastjson.JSON;
+import com.citic.asp.test.loader.Account;
 import com.citic.asp.test.protocal.*;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.jmeter.config.Arguments;
@@ -8,6 +9,8 @@ import org.apache.jmeter.protocol.java.sampler.JavaSamplerContext;
 import org.apache.jmeter.samplers.SampleResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.List;
 
 /**
  * MQTT发送消息Sampler
@@ -54,6 +57,14 @@ public class MqttSenderSampler extends AbstractMqttSampler {
      * 接收设备
      */
     private static final String PARAMETER_TO_DEVICE = "to_device";
+    /**
+     * 发送人账号
+     */
+    private static volatile List<Account> SEND_ACCOUNTS = null;
+    /**
+     * 是否第一次
+     */
+    private static volatile boolean first = true;
 
 
     @Override
@@ -98,8 +109,9 @@ public class MqttSenderSampler extends AbstractMqttSampler {
 //                TimeUnit.MILLISECONDS.sleep(50);
                 //判断是否发设备消息
                 boolean success = true;
+                log.info("===========> 发送单聊消息,session:{}, sessionKey:{}", session, mqttManager.getSessionKey(session.getChannelContext()));
                 if(sendDeviceMessage){
-                    sender.sendDeviceMessage(message, mqttConfig.getServiceId(), toDevice, session.getChannelContext(), mqttConfig.getEncryptKey());
+                    success = sender.sendDeviceMessage(message, mqttConfig.getServiceId(), toDevice, session.getChannelContext(), mqttConfig.getEncryptKey(), waitResponse, sendTimeout);
                 }else{
                     success = sender.sendSingleMessage(message, mqttConfig.getServiceId(), toUser, session.getChannelContext(), mqttConfig.getEncryptKey(), waitResponse, sendTimeout);
                 }
@@ -121,6 +133,9 @@ public class MqttSenderSampler extends AbstractMqttSampler {
         return result;
     }
 
+    public static void setSendAccounts(List<Account> accountList){
+        SEND_ACCOUNTS = accountList;
+    }
 
     @Override
     public Arguments getDefaultParameters() {
@@ -137,4 +152,30 @@ public class MqttSenderSampler extends AbstractMqttSampler {
         return defaultArgs;
     }
 
+    /**
+     * 初始化连接
+     */
+    @Override
+    public void initConnection() {
+        if(first){
+            first = false;
+            if(SEND_ACCOUNTS != null && SEND_ACCOUNTS.size() > 0){
+                for(Account account : SEND_ACCOUNTS){
+                    mqttManager.getConnection(getMqttConfig().getHost(), getMqttConfig().getPort(), getMqttConfig().getConnectTimeout(),
+                            getMqttConfig().getServiceId(), account.getUsername(), account.getDeviceId(), account.getDeviceType(), getMqttConfig().getEncryptKey(),
+                            getMqttConfig().isNeedLogin());
+                    log.info("=====> 创建连接:{}", account);
+                }
+            }
+        }
+    }
+
+    /**
+     * 清理工作
+     */
+    @Override
+    public void cleanup(){
+        SEND_ACCOUNTS = null;
+        first = true;
+    }
 }

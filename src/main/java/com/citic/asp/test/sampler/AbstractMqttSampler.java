@@ -141,9 +141,20 @@ public abstract class AbstractMqttSampler extends AbstractJavaSamplerClient {
 
     @Override
     public void setupTest(JavaSamplerContext context) {
+        initConnection();
         mqttConfig = loadConfig(context);
         log.info("######### Setup Test. Current Thread:{}, MqttConfig:{}", Thread.currentThread().getName(), mqttConfig);
     }
+
+    /**
+     * 初始化连接
+     */
+    public abstract void initConnection();
+
+    /**
+     * 清理工作
+     */
+    public abstract void cleanup();
 
 //    /**
 //     * 获取socket key
@@ -314,7 +325,17 @@ public abstract class AbstractMqttSampler extends AbstractJavaSamplerClient {
         super.teardownTest(context);
         log.info("######### Teardown Test. Current Thread:{}. ", Thread.currentThread().getName());
 //        MqttManager.getInstance().releaseAllConnection();
-        releaseSocket();
+        cleanup();
+        mqttManager.releaseAllConnections();
+        if(!SOCKET_MAP.isEmpty()){
+            SOCKET_MAP.clear();
+        }
+        if(!USER_MAP.isEmpty()){
+            USER_MAP.clear();
+        }
+        if(!LOCAL_CACHE.isEmpty()){
+            LOCAL_CACHE.clear();
+        }
     }
 
     private void releaseSocket(){
@@ -331,10 +352,11 @@ public abstract class AbstractMqttSampler extends AbstractJavaSamplerClient {
                     }
                 }
             }
-            SOCKET_MAP.clear();
-            USER_MAP.clear();
-            LOCAL_CACHE.clear();
+
         }
+        SOCKET_MAP.clear();
+        USER_MAP.clear();
+        LOCAL_CACHE.clear();
     }
 
     /**

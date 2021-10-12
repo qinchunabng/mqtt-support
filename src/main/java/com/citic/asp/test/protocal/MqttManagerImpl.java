@@ -1,13 +1,17 @@
 package com.citic.asp.test.protocal;
 
-import com.alibaba.fastjson.JSON;
 import com.citic.asp.cmc.core.message.*;
-import com.citic.asp.core.util.security.SecurityTool;
 import com.citic.asp.core.util.security.gm.SM4Util;
 import com.citic.asp.core.util.string.IdUtil;
-import com.citic.asp.test.protocal.message.*;
+import com.citic.asp.test.protocal.message.CherryPacket;
+import com.citic.asp.test.protocal.message.ImPayloadCodec;
+import com.citic.asp.test.protocal.message.ImPayloadFactory;
+import com.citic.asp.test.protocal.message.ImPayloadType;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
 import com.google.common.collect.Sets;
-import org.apache.commons.lang3.StringUtils;
+import com.google.common.graph.Graph;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tio.client.ClientTioConfig;
@@ -18,8 +22,6 @@ import org.tio.core.Node;
 import org.tio.core.Tio;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
@@ -80,6 +82,20 @@ public class MqttManagerImpl implements MqttManager{
      * 缓存加密字符串
      */
     private static final Map<String, String> ENCRYPT_MAP = new ConcurrentHashMap<>();
+    /**
+     * guava缓存，基于LRU缓存淘汰策略
+     */
+    private static final LoadingCache<String, Object> CACHE = CacheBuilder.newBuilder()
+            .maximumSize(1000)
+            .expireAfterAccess(10, TimeUnit.MINUTES)
+            .build(
+                    new CacheLoader<String, Object>() {
+                        @Override
+                        public Graph load(String key) throws Exception {
+                            // 处理缓存键不存在缓存值时的处理逻辑
+                            return null;
+                        }
+                    });
 
     private static final ClientTioConfig clientTioConfig = new ClientTioConfig(new CmcClientAioHandler(),
             new CmcClientAioListener(), new ReconnConf(5000L, 3));
@@ -137,7 +153,7 @@ public class MqttManagerImpl implements MqttManager{
         long messageId = IdUtil.nextId();
         sendMessage(messageId, topic, message, payloadType, channelContext, true, encryptKey);
 //        log.info("发送消息,messageId:{}, message:{}", messageId, message);
-        log.info("发送消息,messageId:{}", messageId);
+        log.info("发送消息,messageId:{},sessionKey:{}", messageId, getSessionKey(channelContext));
         boolean result = true;
         //如果需要等效消息回执，执行等待操作，
         if(waitResponse){
@@ -166,7 +182,15 @@ public class MqttManagerImpl implements MqttManager{
         ImPayloadFactory imPayloadFactory = new ImPayloadFactory();
         byte[] data = message.getBytes(StandardCharsets.UTF_8);
         if(isEncrypted){
-            data = SM4Util.encryptCBC(encryptKey, data);
+            try {
+                //使用缓存减少加密运算的次数
+                byte[] finalData = data;
+                data = (byte[]) CACHE.get(message,() -> {
+                    return SM4Util.encryptCBC(encryptKey, finalData);
+                });
+            } catch (ExecutionException e) {
+                log.error("读取消息缓存异常", e);
+            }
         }
         CherryMessagePayload payload = imPayloadFactory.createPayload(messageId, payloadType, data, System.currentTimeMillis());
         CherryMessage cherryMessage = MqttMessageFactory.createPublishMessage(topic, payload);
@@ -179,6 +203,11 @@ public class MqttManagerImpl implements MqttManager{
      * @param serviceId 服务ID
      * @param toUser 接收人
      * @param channelContext 连接上下文
+     * @param encryptKey 加密密钥
+     * @param waitResponse 是否等待回执
+     * @param sendTimeout 发送超时时间
+     * @return 如果waitResponse为true，即需要等待服务器返回消息回执，收到服务器的消息回执返回为true，超过指定的等待时间没有收到消息回执返回false
+     *         如果waitResponse为false，默认返回true
      */
     @Override
     public boolean sendSingleMessage(String message, String serviceId, String toUser, ChannelContext channelContext, String encryptKey,boolean waitResponse, int sendTimeout) throws IOException {
@@ -192,10 +221,14 @@ public class MqttManagerImpl implements MqttManager{
      * @param toDevice 接收设备ID
      * @param channelContext 连接上下文
      * @param encryptKey 加密密钥
+     * @param waitResponse 是否等待回执
+     * @param sendTimeout 发送超时时间
+     * @return 如果waitResponse为true，即需要等待服务器返回消息回执，收到服务器的消息回执返回为true，超过指定的等待时间没有收到消息回执返回false
+     *         如果waitResponse为false，默认返回true
      */
     @Override
-    public void sendDeviceMessage(String message, String serviceId, String toDevice, ChannelContext channelContext, String encryptKey) throws IOException {
-        send(message, ImPayloadType.SINGLE_CHAT.getCode(), channelContext, String.format(DEVICE_MESSAGE_TOPIC, serviceId, toDevice), encryptKey, false, 0);
+    public boolean sendDeviceMessage(String message, String serviceId, String toDevice, ChannelContext channelContext, String encryptKey,boolean waitResponse, int sendTimeout) throws IOException {
+        return send(message, ImPayloadType.SINGLE_CHAT.getCode(), channelContext, String.format(DEVICE_MESSAGE_TOPIC, serviceId, toDevice), encryptKey, waitResponse, sendTimeout);
     }
 
     /**
@@ -205,6 +238,10 @@ public class MqttManagerImpl implements MqttManager{
      * @param groupId 群ID
      * @param channelContext 连接上下文
      * @param encryptKey 加密key
+     * @param waitResponse 是否等待回执
+     * @param sendTimeout 发送超时时间
+     * @return 如果waitResponse为true，即需要等待服务器返回消息回执，收到服务器的消息回执返回为true，超过指定的等待时间没有收到消息回执返回false
+     *         如果waitResponse为false，默认返回true
      */
     @Override
     public boolean sendGroupMessage(String message, String serviceId, String groupId, ChannelContext channelContext, String encryptKey,boolean waitResponse, int sendTimeout) throws IOException {
@@ -285,11 +322,9 @@ public class MqttManagerImpl implements MqttManager{
             //将消息放入到对应的连接会话的队列中
             String sessionKey = getSessionKey(channelContext);
             String secretKey = null;
+            MqttSession mqttSession = null;
             if(sessionKey != null){
-                MqttSession mqttSession = SESSION_MAP.get(sessionKey);
-                if(mqttSession != null){
-                    mqttSession.getMessageQueue().add(message);
-                }
+                mqttSession = SESSION_MAP.get(sessionKey);
             }
 
             //发布消息payload部分
@@ -298,11 +333,14 @@ public class MqttManagerImpl implements MqttManager{
             // 解析成消息体对象
             CherryMessagePayload cherryMessagePayload = cherryMessagePayloadCodec.decode(payload);
             long messageId = cherryMessagePayload.getId();
-            log.info("????????????? 收到消息，将消息加入队列，messageId:{}", messageId);
             if(cherryMessagePayload.getBody() != null){
                 ImPayloadType payloadType = (ImPayloadType)cherryMessagePayload.getCherryMessagePayloadType();
                 ImPayloadFactory imPayloadFactory = new ImPayloadFactory();
                 if(payloadType == ImPayloadType.SINGLE_CHAT){
+                    if(mqttSession != null){
+                        log.info("????????????? 收到单聊消息，将消息加入队列，messageId:{}", messageId);
+                        mqttSession.getMessageQueue().add(message);
+                    }
                     //单聊消息
                     //单聊发送单聊已读回执
 //                    CherryMessageTopicCodec topicCodec = new CmcTopicCodec();
@@ -333,6 +371,10 @@ public class MqttManagerImpl implements MqttManager{
                     }
                 }else if(payloadType == ImPayloadType.GROUP_CHAT){
                     //群消息
+                    if(mqttSession != null){
+                        log.info("????????????? 收到群消息，将消息加入队列，messageId:{}", messageId);
+                        mqttSession.getMessageQueue().add(message);
+                    }
                     //消息内容解析
 //                    if(secretKey == null){
 //                        return;
@@ -415,6 +457,7 @@ public class MqttManagerImpl implements MqttManager{
         return SESSION_MAP.computeIfAbsent(getSessionKey(host, port, userId, deviceId), sessionKey -> {
             try {
                 ChannelContext channelContext = connect(host, port, timeout);
+                setSessionKey(channelContext, sessionKey);
                 auth(serviceId, deviceId, deviceType, encryptKey, channelContext);
                 if(needLogin){
                     online(serviceId, userId, channelContext);
@@ -465,5 +508,24 @@ public class MqttManagerImpl implements MqttManager{
     @Override
     public String getSessionKey(String host, int port, String userId, String deviceId){
         return TCPKEY+"#" + host + "#" + port + "#" + userId + "#" + deviceId;
+    }
+
+    /**
+     * 释放所有的连接
+     */
+    @Override
+    public void releaseAllConnections(){
+        if(SESSION_MAP.isEmpty()){
+            return;
+        }
+        synchronized (SESSION_MAP){
+            if(!SESSION_MAP.isEmpty()){
+                for(MqttSession session : SESSION_MAP.values()){
+                    ChannelContext channelContext = session.getChannelContext();
+                    channelContext.setClosed(true);
+                }
+                SESSION_MAP.clear();
+            }
+        }
     }
 }

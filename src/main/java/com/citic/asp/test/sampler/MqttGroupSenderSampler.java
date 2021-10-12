@@ -1,6 +1,7 @@
 package com.citic.asp.test.sampler;
 
 import com.alibaba.fastjson.JSON;
+import com.citic.asp.test.loader.Account;
 import com.citic.asp.test.protocal.GroupMessage;
 import com.citic.asp.test.protocal.MessageType;
 import com.citic.asp.test.protocal.MqttSession;
@@ -10,6 +11,8 @@ import org.apache.jmeter.protocol.java.sampler.JavaSamplerContext;
 import org.apache.jmeter.samplers.SampleResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.List;
 
 /**
  * mqtt群消息sampler
@@ -47,6 +50,16 @@ public class MqttGroupSenderSampler extends AbstractMqttSampler{
      * 发送设备类型
      */
     private static final String PARAMETER_FROM_DEVICE_TYPE = "from_device_type";
+
+    /**
+     * 是否第一次
+     */
+    private static volatile boolean first = true;
+
+    /**
+     * 发送人账号
+     */
+    private static volatile List<Account> SEND_ACCOUNTS = null;
 
     @Override
     public SampleResult runTest(JavaSamplerContext context) {
@@ -113,5 +126,30 @@ public class MqttGroupSenderSampler extends AbstractMqttSampler{
         defaultArgs.addArgument(PARAMETER_GROUP_NAME, "${groupName}");
         defaultArgs.addArgument(PARAMETER_SEND_TIMEOUT, "2000");
         return defaultArgs;
+    }
+
+    public static void setSendAccounts(List<Account> accountList){
+        SEND_ACCOUNTS = accountList;
+    }
+
+    @Override
+    public void initConnection() {
+        if(first){
+            first = false;
+            if(SEND_ACCOUNTS != null && SEND_ACCOUNTS.size() > 0){
+                for(Account account : SEND_ACCOUNTS){
+                    mqttManager.getConnection(getMqttConfig().getHost(), getMqttConfig().getPort(), getMqttConfig().getConnectTimeout(),
+                            getMqttConfig().getServiceId(), account.getUsername(), account.getDeviceId(), account.getDeviceType(), getMqttConfig().getEncryptKey(),
+                            getMqttConfig().isNeedLogin());
+                    log.info("=====> 创建连接:{}", account);
+                }
+            }
+        }
+    }
+
+    @Override
+    public void cleanup() {
+        SEND_ACCOUNTS = null;
+        first = true;
     }
 }

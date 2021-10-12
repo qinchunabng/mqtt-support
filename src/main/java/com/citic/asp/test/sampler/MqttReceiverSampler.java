@@ -1,6 +1,7 @@
 package com.citic.asp.test.sampler;
 
 import com.citic.asp.cmc.core.message.CherryMessage;
+import com.citic.asp.test.loader.Account;
 import com.citic.asp.test.protocal.MqttManager;
 import com.citic.asp.test.protocal.MqttManagerImpl;
 import com.citic.asp.test.protocal.MqttSession;
@@ -16,6 +17,7 @@ import java.io.InputStream;
 import java.net.Socket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
+import java.util.List;
 
 /**
  * mqtt消息接收sampler
@@ -35,7 +37,15 @@ public class MqttReceiverSampler extends AbstractMqttSampler{
 
     private static final String PARAMETER_TO_DEVICE_TYPE = "to_device_type";
 
-    private MqttManager mqttManager = MqttManagerImpl.getInstance();
+    /**
+     * 接收账号
+     */
+    private static volatile List<Account> RECEIVE_ACCOUNTS = null;
+
+    /**
+     * 是否第一次
+     */
+    private static volatile boolean first = true;
 
     @Override
     public SampleResult runTest(JavaSamplerContext context) {
@@ -62,7 +72,9 @@ public class MqttReceiverSampler extends AbstractMqttSampler{
 
         if(StringUtils.isNotEmpty(toUser)){
             try{
+                log.info("=============> 开始接收消息,sessionKey:{}, session:{}, currentTime:{}", mqttManager.getSessionKey(session.getChannelContext()), session, System.currentTimeMillis());
                 CherryMessage message = receiver.receive(session, receiveTimeout);
+                log.info("=============> 接收消息结束,sessionKey:{}, session:{}, message:{}, currentTime:{}", mqttManager.getSessionKey(session.getChannelContext()), session, message, System.currentTimeMillis());
                 if(message == null){
                     sampleResultFailed(result, "504", new RuntimeException("接收消息超时"));
                 }else{
@@ -78,6 +90,10 @@ public class MqttReceiverSampler extends AbstractMqttSampler{
         return result;
     }
 
+    public static void setReceiveAccounts(List<Account> accountList){
+        RECEIVE_ACCOUNTS = accountList;
+    }
+
     @Override
     public Arguments getDefaultParameters() {
         Arguments defaultArgs = super.getDefaultParameters();
@@ -86,5 +102,32 @@ public class MqttReceiverSampler extends AbstractMqttSampler{
         defaultArgs.addArgument(PARAMETER_TO_DEVICE, "${toDevice}");
         defaultArgs.addArgument(PARAMETER_TO_DEVICE_TYPE, "${toDeviceType}");
         return defaultArgs;
+    }
+
+    /**
+     * 初始化连接
+     */
+    @Override
+    public void initConnection() {
+        if(first){
+            first = false;
+            if(RECEIVE_ACCOUNTS != null && RECEIVE_ACCOUNTS.size() > 0){
+                for(Account account : RECEIVE_ACCOUNTS){
+                    mqttManager.getConnection(getMqttConfig().getHost(), getMqttConfig().getPort(), getMqttConfig().getConnectTimeout(),
+                            getMqttConfig().getServiceId(), account.getUsername(), account.getDeviceId(), account.getDeviceType(), getMqttConfig().getEncryptKey(),
+                            getMqttConfig().isNeedLogin());
+                    log.info("=====> 创建连接:{}", account);
+                }
+            }
+        }
+    }
+
+    /**
+     * 清理工作
+     */
+    @Override
+    public void cleanup(){
+        RECEIVE_ACCOUNTS = null;
+        first = true;
     }
 }

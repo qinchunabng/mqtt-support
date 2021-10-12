@@ -58,4 +58,9 @@ public interface MqttManager extends MessageSender, MessageReceiver{
      * @return
      */
     void receive(CherryMessage cherryMessage, ChannelContext channelContext) throws IOException;
+
+    /**
+     * 释放所有的连接
+     */
+    void releaseAllConnections();
 }
