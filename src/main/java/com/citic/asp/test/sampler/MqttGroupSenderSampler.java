@@ -13,6 +13,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * mqtt群消息sampler
@@ -60,6 +62,25 @@ public class MqttGroupSenderSampler extends AbstractMqttSampler{
      * 发送人账号
      */
     private static volatile List<Account> SEND_ACCOUNTS = null;
+    /**
+     * 初始化锁对象
+     */
+    private static final Object initialLock = new Object();
+
+    /**
+     * 发送群消息取样器线程池
+     */
+    private static ExecutorService GROUP_SENDER_THREAD_POOL = new ThreadPoolExecutor(1, 4,1, TimeUnit.MINUTES,new LinkedBlockingQueue<>(50), new ThreadFactory() {
+
+        private AtomicInteger counter = new AtomicInteger(0);
+
+        @Override
+        public Thread newThread(Runnable r) {
+            Thread thread = new Thread(r, "GroupSenderPool-Thread-" + counter.incrementAndGet());
+            thread.setDaemon(true);
+            return thread;
+        }
+    }, new ThreadPoolExecutor.CallerRunsPolicy());
 
     @Override
     public SampleResult runTest(JavaSamplerContext context) {
@@ -135,14 +156,18 @@ public class MqttGroupSenderSampler extends AbstractMqttSampler{
     @Override
     public void initConnection() {
         if(first){
-            first = false;
-            if(SEND_ACCOUNTS != null && SEND_ACCOUNTS.size() > 0){
-                for(Account account : SEND_ACCOUNTS){
-                    mqttManager.getConnection(getMqttConfig().getHost(), getMqttConfig().getPort(), getMqttConfig().getConnectTimeout(),
-                            getMqttConfig().getServiceId(), account.getUsername(), account.getDeviceId(), account.getDeviceType(), getMqttConfig().getEncryptKey(),
-                            getMqttConfig().isNeedLogin());
-                    log.info("=====> 创建连接:{}", account);
+            synchronized (initialLock) {
+                if (first && SEND_ACCOUNTS != null && SEND_ACCOUNTS.size() > 0) {
+                    for (Account account : SEND_ACCOUNTS) {
+                        GROUP_SENDER_THREAD_POOL.execute(() -> {
+                            mqttManager.getConnection(getMqttConfig().getHost(), getMqttConfig().getPort(), getMqttConfig().getConnectTimeout(),
+                                    getMqttConfig().getServiceId(), account.getUsername(), account.getDeviceId(), account.getDeviceType(), getMqttConfig().getEncryptKey(),
+                                    getMqttConfig().isNeedLogin());
+                            log.info("=====> 创建连接:{}", account);
+                        });
+                    }
                 }
+                first = false;
             }
         }
     }

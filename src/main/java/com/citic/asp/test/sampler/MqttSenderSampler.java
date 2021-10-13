@@ -11,6 +11,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * MQTT发送消息Sampler
@@ -65,7 +67,25 @@ public class MqttSenderSampler extends AbstractMqttSampler {
      * 是否第一次
      */
     private static volatile boolean first = true;
+    /**
+     * 初始化锁对象
+     */
+    private static final Object initialLock = new Object();
 
+    /**
+     * 发送取样器线程池
+     */
+    private static ExecutorService SENDER_THREAD_POOL = new ThreadPoolExecutor(1, 4,1, TimeUnit.MINUTES,new LinkedBlockingQueue<>(50), new ThreadFactory() {
+
+        private AtomicInteger counter = new AtomicInteger(0);
+
+        @Override
+        public Thread newThread(Runnable r) {
+            Thread thread = new Thread(r, "SenderPool-Thread-" + counter.incrementAndGet());
+            thread.setDaemon(true);
+            return thread;
+        }
+    }, new ThreadPoolExecutor.CallerRunsPolicy());
 
     @Override
     public SampleResult runTest(JavaSamplerContext context) {
@@ -158,14 +178,19 @@ public class MqttSenderSampler extends AbstractMqttSampler {
     @Override
     public void initConnection() {
         if(first){
-            first = false;
-            if(SEND_ACCOUNTS != null && SEND_ACCOUNTS.size() > 0){
-                for(Account account : SEND_ACCOUNTS){
-                    mqttManager.getConnection(getMqttConfig().getHost(), getMqttConfig().getPort(), getMqttConfig().getConnectTimeout(),
-                            getMqttConfig().getServiceId(), account.getUsername(), account.getDeviceId(), account.getDeviceType(), getMqttConfig().getEncryptKey(),
-                            getMqttConfig().isNeedLogin());
-                    log.info("=====> 创建连接:{}", account);
+            synchronized (initialLock){
+//                log.info("=======> 初始化连接，SEND_ACCOUNTS:{}", SEND_ACCOUNTS);
+                if(first && SEND_ACCOUNTS != null && SEND_ACCOUNTS.size() > 0){
+                    for(Account account : SEND_ACCOUNTS){
+                        SENDER_THREAD_POOL.execute(() -> {
+                            mqttManager.getConnection(getMqttConfig().getHost(), getMqttConfig().getPort(), getMqttConfig().getConnectTimeout(),
+                                    getMqttConfig().getServiceId(), account.getUsername(), account.getDeviceId(), account.getDeviceType(), getMqttConfig().getEncryptKey(),
+                                    getMqttConfig().isNeedLogin());
+                            log.info("=====> 创建连接:{}", account);
+                        });
+                    }
                 }
+                first = false;
             }
         }
     }

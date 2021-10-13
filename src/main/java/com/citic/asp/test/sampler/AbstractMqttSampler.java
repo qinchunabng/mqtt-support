@@ -141,9 +141,9 @@ public abstract class AbstractMqttSampler extends AbstractJavaSamplerClient {
 
     @Override
     public void setupTest(JavaSamplerContext context) {
-        initConnection();
         mqttConfig = loadConfig(context);
         log.info("######### Setup Test. Current Thread:{}, MqttConfig:{}", Thread.currentThread().getName(), mqttConfig);
+        initConnection();
     }
 
     /**

@@ -18,6 +18,8 @@ import java.net.Socket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.util.List;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * mqtt消息接收sampler
@@ -46,6 +48,25 @@ public class MqttReceiverSampler extends AbstractMqttSampler{
      * 是否第一次
      */
     private static volatile boolean first = true;
+    /**
+     * 初始化锁对象
+     */
+    private static final Object initialLock = new Object();
+
+    /**
+     * 接收取样器线程池
+     */
+    private static ExecutorService RECEIVER_THREAD_POOL = new ThreadPoolExecutor(1, 4,1, TimeUnit.MINUTES,new LinkedBlockingQueue<>(50), new ThreadFactory() {
+
+        private AtomicInteger counter = new AtomicInteger(0);
+
+        @Override
+        public Thread newThread(Runnable r) {
+            Thread thread = new Thread(r, "ReceiverPool-Thread-" + counter.incrementAndGet());
+            thread.setDaemon(true);
+            return thread;
+        }
+    }, new ThreadPoolExecutor.CallerRunsPolicy());
 
     @Override
     public SampleResult runTest(JavaSamplerContext context) {
@@ -64,7 +85,7 @@ public class MqttReceiverSampler extends AbstractMqttSampler{
         MqttSession session = mqttManager.getConnection(mqttConfig.getHost(), mqttConfig.getPort(),mqttConfig.getConnectTimeout(), mqttConfig.getServiceId(),
                 toUser, toDevice, deviceType, mqttConfig.getEncryptKey(), mqttConfig.isNeedLogin());
         SampleResult result = newSampleResult();
-        sampleResultStart(result, getMessage());
+        sampleResultStart(result, "");
         if(session == null){
             sampleResultFailed(result, "500", getError());
             return result;
@@ -72,9 +93,9 @@ public class MqttReceiverSampler extends AbstractMqttSampler{
 
         if(StringUtils.isNotEmpty(toUser)){
             try{
-                log.info("=============> 开始接收消息,sessionKey:{}, session:{}, currentTime:{}", mqttManager.getSessionKey(session.getChannelContext()), session, System.currentTimeMillis());
+//                log.info("=============> 开始接收消息,sessionKey:{}, session:{}, currentTime:{}", mqttManager.getSessionKey(session.getChannelContext()), session, System.currentTimeMillis());
                 CherryMessage message = receiver.receive(session, receiveTimeout);
-                log.info("=============> 接收消息结束,sessionKey:{}, session:{}, message:{}, currentTime:{}", mqttManager.getSessionKey(session.getChannelContext()), session, message, System.currentTimeMillis());
+//                log.info("=============> 接收消息结束,sessionKey:{}, session:{}, message:{}, currentTime:{}", mqttManager.getSessionKey(session.getChannelContext()), session, message, System.currentTimeMillis());
                 if(message == null){
                     sampleResultFailed(result, "504", new RuntimeException("接收消息超时"));
                 }else{
@@ -110,14 +131,18 @@ public class MqttReceiverSampler extends AbstractMqttSampler{
     @Override
     public void initConnection() {
         if(first){
-            first = false;
-            if(RECEIVE_ACCOUNTS != null && RECEIVE_ACCOUNTS.size() > 0){
-                for(Account account : RECEIVE_ACCOUNTS){
-                    mqttManager.getConnection(getMqttConfig().getHost(), getMqttConfig().getPort(), getMqttConfig().getConnectTimeout(),
-                            getMqttConfig().getServiceId(), account.getUsername(), account.getDeviceId(), account.getDeviceType(), getMqttConfig().getEncryptKey(),
-                            getMqttConfig().isNeedLogin());
-                    log.info("=====> 创建连接:{}", account);
+            synchronized (initialLock) {
+                if (first && RECEIVE_ACCOUNTS != null && RECEIVE_ACCOUNTS.size() > 0) {
+                    for (Account account : RECEIVE_ACCOUNTS) {
+                        RECEIVER_THREAD_POOL.execute(() -> {
+                            mqttManager.getConnection(getMqttConfig().getHost(), getMqttConfig().getPort(), getMqttConfig().getConnectTimeout(),
+                                    getMqttConfig().getServiceId(), account.getUsername(), account.getDeviceId(), account.getDeviceType(), getMqttConfig().getEncryptKey(),
+                                    getMqttConfig().isNeedLogin());
+                            log.info("=====> 创建连接:{}", account);
+                        });
+                    }
                 }
+                first = false;
             }
         }
     }
