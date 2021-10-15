@@ -177,22 +177,22 @@ public class MqttSenderSampler extends AbstractMqttSampler {
      */
     @Override
     public void initConnection() {
-        if(first){
-            synchronized (initialLock){
-//                log.info("=======> 初始化连接，SEND_ACCOUNTS:{}", SEND_ACCOUNTS);
-                if(first && SEND_ACCOUNTS != null && SEND_ACCOUNTS.size() > 0){
-                    for(Account account : SEND_ACCOUNTS){
-                        SENDER_THREAD_POOL.execute(() -> {
-                            mqttManager.getConnection(getMqttConfig().getHost(), getMqttConfig().getPort(), getMqttConfig().getConnectTimeout(),
-                                    getMqttConfig().getServiceId(), account.getUsername(), account.getDeviceId(), account.getDeviceType(), getMqttConfig().getEncryptKey(),
-                                    getMqttConfig().isNeedLogin());
-                            log.info("=====> 创建连接:{}", account);
-                        });
-                    }
-                }
-                first = false;
-            }
-        }
+//        if(first){
+//            synchronized (initialLock){
+////                log.info("=======> 初始化连接，SEND_ACCOUNTS:{}", SEND_ACCOUNTS);
+//                if(first && SEND_ACCOUNTS != null && SEND_ACCOUNTS.size() > 0){
+//                    for(Account account : SEND_ACCOUNTS){
+//                        SENDER_THREAD_POOL.execute(() -> {
+//                            mqttManager.getConnection(getMqttConfig().getHost(), getMqttConfig().getPort(), getMqttConfig().getConnectTimeout(),
+//                                    getMqttConfig().getServiceId(), account.getUsername(), account.getDeviceId(), account.getDeviceType(), getMqttConfig().getEncryptKey(),
+//                                    getMqttConfig().isNeedLogin());
+//                            log.info("=====> 创建连接:{}", account);
+//                        });
+//                    }
+//                }
+//                first = false;
+//            }
+//        }
     }
 
     /**

@@ -454,8 +454,11 @@ public class MqttManagerImpl implements MqttManager{
      */
     @Override
     public MqttSession getConnection(String host, int port, int timeout, String serviceId, String userId, String deviceId, String deviceType, String encryptKey, boolean needLogin){
+        log.info("=====> 当前连接数:{}", SESSION_MAP.size());
         return SESSION_MAP.computeIfAbsent(getSessionKey(host, port, userId, deviceId), sessionKey -> {
             try {
+                //休眠一秒，减慢创建连接的速度
+//                TimeUnit.SECONDS.sleep(1);
                 ChannelContext channelContext = connect(host, port, timeout);
                 setSessionKey(channelContext, sessionKey);
                 auth(serviceId, deviceId, deviceType, encryptKey, channelContext);
