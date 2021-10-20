@@ -124,7 +124,9 @@ public class MqttSenderSampler extends AbstractMqttSampler {
                     .toUser(toUser)
                     .textContent(getMessage())
                     .build();
-            String message = JSON.toJSONString(singleMessage);
+//            String message = JSON.toJSONString(singleMessage);
+            //不组装消息，直接发送message
+            String message = getMessage();
             try{
 //                TimeUnit.MILLISECONDS.sleep(50);
                 //判断是否发设备消息

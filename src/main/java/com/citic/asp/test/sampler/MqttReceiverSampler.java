@@ -94,7 +94,7 @@ public class MqttReceiverSampler extends AbstractMqttSampler{
         if(StringUtils.isNotEmpty(toUser)){
             try{
 //                log.info("=============> 开始接收消息,sessionKey:{}, session:{}, currentTime:{}", mqttManager.getSessionKey(session.getChannelContext()), session, System.currentTimeMillis());
-                CherryMessage message = receiver.receive(session, receiveTimeout);
+                Object message = receiver.receive(session, receiveTimeout);
 //                log.info("=============> 接收消息结束,sessionKey:{}, session:{}, message:{}, currentTime:{}", mqttManager.getSessionKey(session.getChannelContext()), session, message, System.currentTimeMillis());
                 if(message == null){
                     sampleResultFailed(result, "504", new RuntimeException("接收消息超时"));

@@ -1,7 +1,5 @@
 package com.citic.asp.test.protocal;
 
-import com.citic.asp.cmc.core.message.CherryMessage;
-
 /**
  * 消息接收
  *
@@ -16,6 +14,6 @@ public interface MessageReceiver extends BaseOperation{
      * @param readTimeout 读超时时间
      * @return
      */
-    CherryMessage receive(MqttSession mqttSession, int readTimeout);
+    Object receive(MqttSession mqttSession, int readTimeout);
 
 }

@@ -1,6 +1,7 @@
 package com.citic.asp.test.loader;
 
 import com.citic.asp.test.sampler.MqttGroupSenderSampler;
+import com.citic.asp.test.sampler.MqttReceiverSampler;
 import com.citic.asp.test.sampler.MqttSenderSampler;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.jmeter.config.ConfigTestElement;
@@ -103,6 +104,7 @@ public class LoadGenerator extends ConfigTestElement implements TestBean, LoopIt
                 }
                 if(toUserGenerator == null){
                     List<Account> receiveAccounts = loadAccounts(getToUser());
+                    MqttReceiverSampler.setReceiveAccounts(receiveAccounts);
                     toUserGenerator = new AccountLoadGenerator(receiveAccounts);
                 }
                 if(groupGenerator == null){
