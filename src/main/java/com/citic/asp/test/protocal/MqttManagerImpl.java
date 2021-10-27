@@ -125,6 +125,7 @@ public class MqttManagerImpl implements MqttManager{
         if(tioClient == null){
             synchronized (clientTioConfig){
                 if(tioClient == null){
+                    clientTioConfig.setHeartbeatTimeout(30000);
                     tioClient = new TioClient(clientTioConfig);
                 }
             }

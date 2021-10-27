@@ -106,7 +106,7 @@ public class MqttSenderSampler extends AbstractMqttSampler {
 
 
         //获取socket连接
-        log.info("=========== 当前fromUser:{}, fromDevice:{}, fromDeviceType:{}, toUser:{}, toDevice:{}", fromUser, fromDevice, fromDeviceType, toUser, toDevice);
+        log.info("===========发送单聊消息, 当前fromUser:{}, fromDevice:{}, fromDeviceType:{}, toUser:{}, toDevice:{}", fromUser, fromDevice, fromDeviceType, toUser, toDevice);
         MqttSession session = mqttManager.getConnection(mqttConfig.getHost(), mqttConfig.getPort(),mqttConfig.getConnectTimeout(), mqttConfig.getServiceId(),
                 fromUser, fromDevice, fromDeviceType, mqttConfig.getEncryptKey(), mqttConfig.isNeedLogin());
         SampleResult result = newSampleResult();
@@ -143,6 +143,7 @@ public class MqttSenderSampler extends AbstractMqttSampler {
                     sampleResultSuccess(result, "OK");
                 }else{
                     //没有收到消息回执，发送超时
+                    log.error("接收发送单聊消息回执超时, 当前fromUser:{}, fromDevice:{}, fromDeviceType:{}, toUser:{}, toDevice:{}", fromUser, fromDevice, fromDeviceType, toUser, toDevice);
                     sampleResultFailed(result, "504",  new RuntimeException("等待消息回执超时"));
                 }
             }catch (Exception e){
@@ -179,22 +180,22 @@ public class MqttSenderSampler extends AbstractMqttSampler {
      */
     @Override
     public void initConnection() {
-        if(first){
-            synchronized (initialLock){
-//                log.info("=======> 初始化连接，SEND_ACCOUNTS:{}", SEND_ACCOUNTS);
-                if(first && SEND_ACCOUNTS != null && SEND_ACCOUNTS.size() > 0){
-                    for(Account account : SEND_ACCOUNTS){
-                        SENDER_THREAD_POOL.execute(() -> {
-                            mqttManager.getConnection(getMqttConfig().getHost(), getMqttConfig().getPort(), getMqttConfig().getConnectTimeout(),
-                                    getMqttConfig().getServiceId(), account.getUsername(), account.getDeviceId(), account.getDeviceType(), getMqttConfig().getEncryptKey(),
-                                    getMqttConfig().isNeedLogin());
-                            log.info("=====> 创建连接:{}", account);
-                        });
-                    }
-                }
-                first = false;
-            }
-        }
+//        if(first){
+//            synchronized (initialLock){
+////                log.info("=======> 初始化连接，SEND_ACCOUNTS:{}", SEND_ACCOUNTS);
+//                if(first && SEND_ACCOUNTS != null && SEND_ACCOUNTS.size() > 0){
+//                    for(Account account : SEND_ACCOUNTS){
+//                        SENDER_THREAD_POOL.execute(() -> {
+//                            mqttManager.getConnection(getMqttConfig().getHost(), getMqttConfig().getPort(), getMqttConfig().getConnectTimeout(),
+//                                    getMqttConfig().getServiceId(), account.getUsername(), account.getDeviceId(), account.getDeviceType(), getMqttConfig().getEncryptKey(),
+//                                    getMqttConfig().isNeedLogin());
+//                            log.info("=====> 创建连接:{}", account);
+//                        });
+//                    }
+//                }
+//                first = false;
+//            }
+//        }
     }
 
     /**
