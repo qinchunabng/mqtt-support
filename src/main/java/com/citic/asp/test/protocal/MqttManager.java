@@ -1,6 +1,7 @@
 package com.citic.asp.test.protocal;
 
 import com.citic.asp.cmc.core.message.CherryMessage;
+import io.netty.channel.ChannelHandlerContext;
 import org.tio.core.ChannelContext;
 
 import java.io.IOException;
@@ -57,7 +58,7 @@ public interface MqttManager extends MessageSender, MessageReceiver{
      * @param channelContext 连接上下文
      * @return
      */
-    void receive(CherryMessage cherryMessage, ChannelContext channelContext) throws IOException;
+    void receive(CherryMessage cherryMessage, ChannelHandlerContext channelContext) throws IOException;
 
     /**
      * 释放所有的连接

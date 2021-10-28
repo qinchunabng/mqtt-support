@@ -4,9 +4,9 @@ package com.citic.asp.test.protocal;
 import com.citic.asp.cmc.core.message.CherryMessage;
 import com.citic.asp.cmc.core.message.CherryMessagePayload;
 import com.citic.asp.cmc.core.message.CherryMessagePayloadType;
-import com.citic.asp.cmc.protocol.mqtt.*;
 import com.citic.asp.core.util.security.SecurityTool;
 import com.citic.asp.core.util.security.gm.SM4Util;
+import io.netty.handler.codec.mqtt.*;
 
 import java.nio.ByteBuffer;
 import java.util.Set;

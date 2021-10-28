@@ -15,6 +15,7 @@
         <cmc-sdk.version>1.0.0-SNAPSHOT</cmc-sdk.version>
         <tio.version>3.7.3.v20210706-SNAPSHOT</tio.version>
         <jmeter.version>5.2.1</jmeter.version>
+        <netty.version>4.1.58.Final</netty.version>
 <!--        <guava.version>30.1-jre</guava.version>-->
     </properties>
 
@@ -31,11 +32,11 @@
             <version>${jmeter.version}</version>
         </dependency>
 
-        <dependency>
-            <groupId>com.citic.asp</groupId>
-            <artifactId>cmc-sdk-protocol</artifactId>
-            <version>${cmc-sdk.version}</version>
-        </dependency>
+<!--        <dependency>-->
+<!--            <groupId>com.citic.asp</groupId>-->
+<!--            <artifactId>cmc-sdk-protocol</artifactId>-->
+<!--            <version>${cmc-sdk.version}</version>-->
+<!--        </dependency>-->
 
         <dependency>
             <groupId>com.citic.asp</groupId>
@@ -44,9 +45,15 @@
         </dependency>
 
         <dependency>
-            <groupId>org.t-io</groupId>
-            <artifactId>tio-core</artifactId>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-all</artifactId>
+            <version>${netty.version}</version>
         </dependency>
+
+<!--        <dependency>-->
+<!--            <groupId>org.t-io</groupId>-->
+<!--            <artifactId>tio-core</artifactId>-->
+<!--        </dependency>-->
 <!--        <dependency>-->
 <!--            <groupId>org.t-io</groupId>-->
 <!--            <artifactId>tio-utils</artifactId>-->
@@ -59,13 +66,13 @@
 
     <dependencyManagement>
         <dependencies>
-            <dependency>
-                <groupId>org.t-io</groupId>
-                <artifactId>tio-parent</artifactId>
-                <version>${tio.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
+<!--            <dependency>-->
+<!--                <groupId>org.t-io</groupId>-->
+<!--                <artifactId>tio-parent</artifactId>-->
+<!--                <version>${tio.version}</version>-->
+<!--                <type>pom</type>-->
+<!--                <scope>import</scope>-->
+<!--            </dependency>-->
         </dependencies>
     </dependencyManagement>
 

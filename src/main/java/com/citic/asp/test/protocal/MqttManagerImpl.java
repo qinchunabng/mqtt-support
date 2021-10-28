@@ -3,25 +3,27 @@ package com.citic.asp.test.protocal;
 import com.citic.asp.cmc.core.message.*;
 import com.citic.asp.core.util.security.gm.SM4Util;
 import com.citic.asp.core.util.string.IdUtil;
-import com.citic.asp.test.protocal.message.CherryPacket;
-import com.citic.asp.test.protocal.message.ImPayloadCodec;
-import com.citic.asp.test.protocal.message.ImPayloadFactory;
-import com.citic.asp.test.protocal.message.ImPayloadType;
+import com.citic.asp.test.protocal.message.*;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.collect.Sets;
 import com.google.common.graph.Graph;
+import io.netty.bootstrap.Bootstrap;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.handler.codec.mqtt.MqttDecoder;
+import io.netty.handler.codec.mqtt.MqttEncoder;
+import io.netty.handler.timeout.IdleStateHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.tio.client.ClientTioConfig;
-import org.tio.client.ReconnConf;
-import org.tio.client.TioClient;
-import org.tio.core.ChannelContext;
-import org.tio.core.Node;
-import org.tio.core.Tio;
 
 import java.io.IOException;
+import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
@@ -85,7 +87,7 @@ public class MqttManagerImpl implements MqttManager{
     /**
      * guava缓存，基于LRU缓存淘汰策略
      */
-    private static final LoadingCache<String, Object> CACHE = CacheBuilder.newBuilder()
+    private static LoadingCache<String, Object> CACHE = CacheBuilder.newBuilder()
             .maximumSize(1000)
             .expireAfterAccess(10, TimeUnit.MINUTES)
             .build(
@@ -97,14 +99,31 @@ public class MqttManagerImpl implements MqttManager{
                         }
                     });
 
-    private static final ClientTioConfig clientTioConfig = new ClientTioConfig(new CmcClientAioHandler(),
-            new CmcClientAioListener(), new ReconnConf(5000L, 3));
+    private final ClientHandler CLIENT_HANDLER;
 
-    private static volatile TioClient tioClient = null;
+    /**
+     * Netty启动类
+     */
+    private final Bootstrap BOOTSTRAP;
 
     private static volatile MqttManagerImpl INSTANCE;
 
-    private MqttManagerImpl(){}
+    private MqttManagerImpl(){
+        CLIENT_HANDLER = new ClientHandler();
+        BOOTSTRAP = new Bootstrap()
+                .group(new NioEventLoopGroup())
+                .channel(NioSocketChannel.class)
+                .handler(new ChannelInitializer<Channel>() {
+                    @Override
+                    protected void initChannel(Channel channel) throws Exception {
+                        channel.pipeline()
+                                .addLast(new IdleStateHandler(0, 10, 0))
+                                .addLast(new MqttDecoder(512200))
+                                .addLast(MqttEncoder.INSTANCE)
+                                .addLast(CLIENT_HANDLER);
+                    }
+                });
+    }
 
     public static MqttManagerImpl getInstance(){
         if(INSTANCE == null){
@@ -117,20 +136,6 @@ public class MqttManagerImpl implements MqttManager{
         return INSTANCE;
     }
 
-    /**
-     * 初始化TioClient
-     * @throws IOException
-     */
-    private void initClient() throws IOException {
-        if(tioClient == null){
-            synchronized (clientTioConfig){
-                if(tioClient == null){
-                    clientTioConfig.setHeartbeatTimeout(30000);
-                    tioClient = new TioClient(clientTioConfig);
-                }
-            }
-        }
-    }
 
     /**
      * 发送消息
@@ -318,7 +323,7 @@ public class MqttManagerImpl implements MqttManager{
      * @return
      */
     @Override
-    public void receive(CherryMessage message, ChannelContext channelContext) throws IOException {
+    public void receive(CherryMessage message, ChannelHandlerContext channelContext) throws IOException {
         if (message.getCherryMessageType() == CherryMessageType.PUBLISH){
             //将消息放入到对应的连接会话的队列中
             String sessionKey = getSessionKey(channelContext);
@@ -438,9 +443,10 @@ public class MqttManagerImpl implements MqttManager{
      * @return
      */
     @Override
-    public ChannelContext connect(String host, int port, int timeout) throws Exception {
-        initClient();
-        return tioClient.connect(new Node(host, port), timeout);
+    public ChannelHandlerContext connect(String host, int port, int timeout) throws Exception {
+        ChannelFuture channelFuture = BOOTSTRAP.connect(host, port).sync();
+
+        return channelFuture.channel();
     }
 
     /**

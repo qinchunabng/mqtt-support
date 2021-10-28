@@ -1,6 +1,6 @@
 package com.citic.asp.test.protocal;
 
-import org.tio.core.ChannelContext;
+import io.netty.channel.ChannelHandlerContext;
 
 import java.io.Serializable;
 import java.util.concurrent.BlockingDeque;
@@ -17,7 +17,7 @@ public class MqttSession implements Serializable {
     public MqttSession() {
     }
 
-    public MqttSession(ChannelContext channelContext, BlockingDeque messageQueue, String secretKey) {
+    public MqttSession(ChannelHandlerContext channelContext, BlockingDeque messageQueue, String secretKey) {
         this.channelContext = channelContext;
         this.messageQueue = messageQueue;
         this.secretKey = secretKey;
@@ -26,7 +26,7 @@ public class MqttSession implements Serializable {
     /**
      * 连接上下文
      */
-    private ChannelContext channelContext;
+    private ChannelHandlerContext channelContext;
 
     /**
      * 保存收到的消息
@@ -38,11 +38,11 @@ public class MqttSession implements Serializable {
      */
     private String secretKey;
 
-    public ChannelContext getChannelContext() {
+    public ChannelHandlerContext getChannelContext() {
         return channelContext;
     }
 
-    public void setChannelContext(ChannelContext channelContext) {
+    public void setChannelContext(ChannelHandlerContext channelContext) {
         this.channelContext = channelContext;
     }
 
