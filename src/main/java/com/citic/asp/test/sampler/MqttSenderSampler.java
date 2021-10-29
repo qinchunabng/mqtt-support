@@ -106,7 +106,7 @@ public class MqttSenderSampler extends AbstractMqttSampler {
 
 
         //获取socket连接
-        log.info("=========== 当前fromUser:{}, fromDevice:{}, fromDeviceType:{}, toUser:{}, toDevice:{}", fromUser, fromDevice, fromDeviceType, toUser, toDevice);
+        log.info("===========发送单聊消息, 当前fromUser:{}, fromDevice:{}, fromDeviceType:{}, toUser:{}, toDevice:{}", fromUser, fromDevice, fromDeviceType, toUser, toDevice);
         MqttSession session = mqttManager.getConnection(mqttConfig.getHost(), mqttConfig.getPort(),mqttConfig.getConnectTimeout(), mqttConfig.getServiceId(),
                 fromUser, fromDevice, fromDeviceType, mqttConfig.getEncryptKey(), mqttConfig.isNeedLogin());
         SampleResult result = newSampleResult();
@@ -124,7 +124,9 @@ public class MqttSenderSampler extends AbstractMqttSampler {
                     .toUser(toUser)
                     .textContent(getMessage())
                     .build();
-            String message = JSON.toJSONString(singleMessage);
+//            String message = JSON.toJSONString(singleMessage);
+            //不组装消息，直接发送message
+            String message = getMessage();
             try{
 //                TimeUnit.MILLISECONDS.sleep(50);
                 //判断是否发设备消息
@@ -141,6 +143,7 @@ public class MqttSenderSampler extends AbstractMqttSampler {
                     sampleResultSuccess(result, "OK");
                 }else{
                     //没有收到消息回执，发送超时
+                    log.error("接收发送单聊消息回执超时, 当前fromUser:{}, fromDevice:{}, fromDeviceType:{}, toUser:{}, toDevice:{}", fromUser, fromDevice, fromDeviceType, toUser, toDevice);
                     sampleResultFailed(result, "504",  new RuntimeException("等待消息回执超时"));
                 }
             }catch (Exception e){

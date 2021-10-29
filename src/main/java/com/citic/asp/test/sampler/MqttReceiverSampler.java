@@ -81,7 +81,7 @@ public class MqttReceiverSampler extends AbstractMqttSampler{
 
         //获取连接上下文
         //获取socket连接
-        log.info("=========== 当前 toUser:{}, toDevice:{}, deviceType:{}", toUser, toDevice, deviceType);
+        log.info("=========== 接收消息，当前 toUser:{}, toDevice:{}, deviceType:{}", toUser, toDevice, deviceType);
         MqttSession session = mqttManager.getConnection(mqttConfig.getHost(), mqttConfig.getPort(),mqttConfig.getConnectTimeout(), mqttConfig.getServiceId(),
                 toUser, toDevice, deviceType, mqttConfig.getEncryptKey(), mqttConfig.isNeedLogin());
         SampleResult result = newSampleResult();
@@ -94,9 +94,10 @@ public class MqttReceiverSampler extends AbstractMqttSampler{
         if(StringUtils.isNotEmpty(toUser)){
             try{
 //                log.info("=============> 开始接收消息,sessionKey:{}, session:{}, currentTime:{}", mqttManager.getSessionKey(session.getChannelContext()), session, System.currentTimeMillis());
-                CherryMessage message = receiver.receive(session, receiveTimeout);
+                Object message = receiver.receive(session, receiveTimeout);
 //                log.info("=============> 接收消息结束,sessionKey:{}, session:{}, message:{}, currentTime:{}", mqttManager.getSessionKey(session.getChannelContext()), session, message, System.currentTimeMillis());
                 if(message == null){
+                    log.error("====> 接收消息超时， 当前 toUser:{}, toDevice:{}, deviceType:{}", toUser, toDevice, deviceType);
                     sampleResultFailed(result, "504", new RuntimeException("接收消息超时"));
                 }else{
                     sampleResultSuccess(result, message.toString());

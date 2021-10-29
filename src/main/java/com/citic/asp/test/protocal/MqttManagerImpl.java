@@ -125,6 +125,7 @@ public class MqttManagerImpl implements MqttManager{
         if(tioClient == null){
             synchronized (clientTioConfig){
                 if(tioClient == null){
+                    clientTioConfig.setHeartbeatTimeout(30000);
                     tioClient = new TioClient(clientTioConfig);
                 }
             }
@@ -180,17 +181,17 @@ public class MqttManagerImpl implements MqttManager{
      */
     public void sendMessage(long messageId, String topic, String message, CherryMessagePayloadType payloadType, ChannelContext channelContext, boolean isEncrypted, String encryptKey) throws IOException {
         ImPayloadFactory imPayloadFactory = new ImPayloadFactory();
-        byte[] data = message.getBytes(StandardCharsets.UTF_8);
-        if(isEncrypted){
-            try {
-                //使用缓存减少加密运算的次数
-                byte[] finalData = data;
-                data = (byte[]) CACHE.get(message,() -> {
-                    return SM4Util.encryptCBC(encryptKey, finalData);
-                });
-            } catch (ExecutionException e) {
-                log.error("读取消息缓存异常", e);
-            }
+
+        byte[] data = new byte[0];
+        try {
+            data = (byte[]) CACHE.get(message, () -> {
+                if(!isEncrypted){
+                    return message.getBytes(StandardCharsets.UTF_8);
+                }
+                return SM4Util.encryptCBC(encryptKey, message.getBytes(StandardCharsets.UTF_8));
+            });
+        } catch (ExecutionException e) {
+            throw new RuntimeException(e);
         }
         CherryMessagePayload payload = imPayloadFactory.createPayload(messageId, payloadType, data, System.currentTimeMillis());
         CherryMessage cherryMessage = MqttMessageFactory.createPublishMessage(topic, payload);
@@ -339,7 +340,8 @@ public class MqttManagerImpl implements MqttManager{
                 if(payloadType == ImPayloadType.SINGLE_CHAT){
                     if(mqttSession != null){
                         log.info("????????????? 收到单聊消息，将消息加入队列，messageId:{}", messageId);
-                        mqttSession.getMessageQueue().add(message);
+//                        mqttSession.getMessageQueue().add(message);
+                        mqttSession.getMessageQueue().add(messageId);
                     }
                     //单聊消息
                     //单聊发送单聊已读回执
@@ -373,7 +375,8 @@ public class MqttManagerImpl implements MqttManager{
                     //群消息
                     if(mqttSession != null){
                         log.info("????????????? 收到群消息，将消息加入队列，messageId:{}", messageId);
-                        mqttSession.getMessageQueue().add(message);
+//                        mqttSession.getMessageQueue().add(message);
+                        mqttSession.getMessageQueue().add(messageId);
                     }
                     //消息内容解析
 //                    if(secretKey == null){
@@ -415,12 +418,12 @@ public class MqttManagerImpl implements MqttManager{
      * @return
      */
     @Override
-    public CherryMessage receive(MqttSession mqttSession, int readTimeout){
+    public Object receive(MqttSession mqttSession, int readTimeout){
         if(mqttSession == null || mqttSession.getMessageQueue() == null){
             return null;
         }
         try {
-            return (CherryMessage) mqttSession.getMessageQueue().poll(readTimeout, TimeUnit.MILLISECONDS);
+            return mqttSession.getMessageQueue().poll(readTimeout, TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
             log.error("接收消息异常", e);
             return null;

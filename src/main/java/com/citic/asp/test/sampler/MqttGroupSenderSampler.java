@@ -99,7 +99,7 @@ public class MqttGroupSenderSampler extends AbstractMqttSampler{
         boolean waitResponse = Boolean.parseBoolean(context.getParameter(PARAMETER_WAIT_RESPONSE, "true"));
 
         //获取socket连接
-        log.info("=========== 当前fromUser:{}, fromDevice:{}, fromDeviceType:{}, groupId:{}", fromUser, fromDevice, fromDeviceType, groupId);
+        log.info("===========发送群消息, 当前fromUser:{}, fromDevice:{}, fromDeviceType:{}, groupId:{}", fromUser, fromDevice, fromDeviceType, groupId);
         MqttSession session = mqttManager.getConnection(mqttConfig.getHost(), mqttConfig.getPort(),mqttConfig.getConnectTimeout(), mqttConfig.getServiceId(),
                 fromUser, fromDevice, fromDeviceType, mqttConfig.getEncryptKey(), mqttConfig.isNeedLogin());
         SampleResult result = newSampleResult();
@@ -125,6 +125,7 @@ public class MqttGroupSenderSampler extends AbstractMqttSampler{
                 if(success){
                     sampleResultSuccess(result, "OK");
                 }else{
+                    log.error("===========接收群聊消息回执超时, 当前fromUser:{}, fromDevice:{}, fromDeviceType:{}, groupId:{}", fromUser, fromDevice, fromDeviceType, groupId);
                     sampleResultFailed(result, "504", new RuntimeException("等待消息回执超时"));
                 }
             }catch (Exception e){
