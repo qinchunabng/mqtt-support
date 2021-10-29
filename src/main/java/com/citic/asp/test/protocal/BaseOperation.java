@@ -1,7 +1,5 @@
 package com.citic.asp.test.protocal;
 
-import io.netty.channel.ChannelInboundHandler;
-
 /**
  * 基本操作
  *
@@ -17,5 +15,5 @@ public interface BaseOperation {
      * @param timeout
      * @return
      */
-    ChannelInboundHandler connect(String host, int port, int timeout) throws Exception;
+    MqttSession connect(String host, int port, int timeout) throws Exception;
 }

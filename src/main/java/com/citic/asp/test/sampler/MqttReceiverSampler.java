@@ -1,22 +1,14 @@
 package com.citic.asp.test.sampler;
 
-import com.citic.asp.cmc.core.message.CherryMessage;
 import com.citic.asp.test.loader.Account;
-import com.citic.asp.test.protocal.MqttManager;
-import com.citic.asp.test.protocal.MqttManagerImpl;
 import com.citic.asp.test.protocal.MqttSession;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.jmeter.config.Arguments;
 import org.apache.jmeter.protocol.java.sampler.JavaSamplerContext;
 import org.apache.jmeter.samplers.SampleResult;
-import org.bouncycastle.util.encoders.Hex;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.InputStream;
-import java.net.Socket;
-import java.net.SocketException;
-import java.net.SocketTimeoutException;
 import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -131,21 +123,21 @@ public class MqttReceiverSampler extends AbstractMqttSampler{
      */
     @Override
     public void initConnection() {
-//        if(first){
-//            synchronized (initialLock) {
-//                if (first && RECEIVE_ACCOUNTS != null && RECEIVE_ACCOUNTS.size() > 0) {
-//                    for (Account account : RECEIVE_ACCOUNTS) {
-//                        RECEIVER_THREAD_POOL.execute(() -> {
-//                            mqttManager.getConnection(getMqttConfig().getHost(), getMqttConfig().getPort(), getMqttConfig().getConnectTimeout(),
-//                                    getMqttConfig().getServiceId(), account.getUsername(), account.getDeviceId(), account.getDeviceType(), getMqttConfig().getEncryptKey(),
-//                                    getMqttConfig().isNeedLogin());
-//                            log.info("=====> 创建连接:{}", account);
-//                        });
-//                    }
-//                }
-//                first = false;
-//            }
-//        }
+        if(first){
+            synchronized (initialLock) {
+                if (first && RECEIVE_ACCOUNTS != null && RECEIVE_ACCOUNTS.size() > 0) {
+                    for (Account account : RECEIVE_ACCOUNTS) {
+                        RECEIVER_THREAD_POOL.execute(() -> {
+                            mqttManager.getConnection(getMqttConfig().getHost(), getMqttConfig().getPort(), getMqttConfig().getConnectTimeout(),
+                                    getMqttConfig().getServiceId(), account.getUsername(), account.getDeviceId(), account.getDeviceType(), getMqttConfig().getEncryptKey(),
+                                    getMqttConfig().isNeedLogin());
+                            log.info("=====> 创建连接:{}", account);
+                        });
+                    }
+                }
+                first = false;
+            }
+        }
     }
 
     /**

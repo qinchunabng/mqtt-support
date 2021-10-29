@@ -10,20 +10,18 @@ import com.google.common.cache.LoadingCache;
 import com.google.common.collect.Sets;
 import com.google.common.graph.Graph;
 import io.netty.bootstrap.Bootstrap;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInitializer;
+import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.mqtt.MqttDecoder;
 import io.netty.handler.codec.mqtt.MqttEncoder;
+import io.netty.handler.codec.mqtt.MqttMessage;
 import io.netty.handler.timeout.IdleStateHandler;
+import io.netty.util.AttributeKey;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
@@ -99,17 +97,18 @@ public class MqttManagerImpl implements MqttManager{
                         }
                     });
 
-    private final ClientHandler CLIENT_HANDLER;
-
     /**
      * Netty启动类
      */
     private final Bootstrap BOOTSTRAP;
 
-    private static volatile MqttManagerImpl INSTANCE;
+    private CherryMessageConverter<MqttMessage> messageConverter;
+
+    private CherryMessageFactory messageFactory;
 
     private MqttManagerImpl(){
-        CLIENT_HANDLER = new ClientHandler();
+        messageConverter = new CimioCherryMessageConverter();
+        messageFactory = new MqttCherryMessageFactory();
         BOOTSTRAP = new Bootstrap()
                 .group(new NioEventLoopGroup())
                 .channel(NioSocketChannel.class)
@@ -120,10 +119,12 @@ public class MqttManagerImpl implements MqttManager{
                                 .addLast(new IdleStateHandler(0, 10, 0))
                                 .addLast(new MqttDecoder(512200))
                                 .addLast(MqttEncoder.INSTANCE)
-                                .addLast(CLIENT_HANDLER);
+                                .addLast(new ClientHandler());
                     }
                 });
     }
+
+    private static volatile MqttManagerImpl INSTANCE;
 
     public static MqttManagerImpl getInstance(){
         if(INSTANCE == null){
@@ -142,7 +143,7 @@ public class MqttManagerImpl implements MqttManager{
      * @param message 消息内容
      * @param messageType 消息类型
      *        @see ImPayloadType
-     * @param channelContext 连接上下文
+     * @param session 连接会话
      * @param topic 消息主题
      * @param encryptKey 加密密钥
      * @param waitResponse 是否等待回执
@@ -151,15 +152,15 @@ public class MqttManagerImpl implements MqttManager{
      *         如果waitResponse为false，默认返回true
      */
     @Override
-    public boolean send(String message, int messageType, ChannelContext channelContext, String topic, String encryptKey, boolean waitResponse, int sendTimeout) throws IOException {
+    public boolean send(String message, int messageType, MqttSession session, String topic, String encryptKey, boolean waitResponse, int sendTimeout) throws IOException {
         CherryMessagePayloadType payloadType = ImPayloadType.valueOf((byte) messageType);
         if(payloadType == null){
             throw new IllegalArgumentException("Message type is incorrect.");
         }
         long messageId = IdUtil.nextId();
-        sendMessage(messageId, topic, message, payloadType, channelContext, true, encryptKey);
+        sendMessage(messageId, topic, message, payloadType, session, true, encryptKey);
 //        log.info("发送消息,messageId:{}, message:{}", messageId, message);
-        log.info("发送消息,messageId:{},sessionKey:{}", messageId, getSessionKey(channelContext));
+        log.info("发送消息,messageId:{},sessionKey:{}", messageId, getSessionKey(session));
         boolean result = true;
         //如果需要等效消息回执，执行等待操作，
         if(waitResponse){
@@ -181,13 +182,13 @@ public class MqttManagerImpl implements MqttManager{
      * @param topic  消息主题
      * @param message 消息内容
      * @param payloadType
-     * @param channelContext 连接上下文
+     * @param session 连接会话
      * @param isEncrypted 是否加密
      */
-    public void sendMessage(long messageId, String topic, String message, CherryMessagePayloadType payloadType, ChannelContext channelContext, boolean isEncrypted, String encryptKey) throws IOException {
+    public void sendMessage(long messageId, String topic, String message, CherryMessagePayloadType payloadType, MqttSession session, boolean isEncrypted, String encryptKey) throws IOException {
         ImPayloadFactory imPayloadFactory = new ImPayloadFactory();
 
-        byte[] data = new byte[0];
+        byte[] data;
         try {
             data = (byte[]) CACHE.get(message, () -> {
                 if(!isEncrypted){
@@ -199,8 +200,8 @@ public class MqttManagerImpl implements MqttManager{
             throw new RuntimeException(e);
         }
         CherryMessagePayload payload = imPayloadFactory.createPayload(messageId, payloadType, data, System.currentTimeMillis());
-        CherryMessage cherryMessage = MqttMessageFactory.createPublishMessage(topic, payload);
-        doSendMessage(cherryMessage, channelContext);
+        CherryMessage cherryMessage = messageFactory.createPublishMessage(topic, payload);
+        doSendMessage(cherryMessage, session);
     }
 
     /**
@@ -208,7 +209,7 @@ public class MqttManagerImpl implements MqttManager{
      * @param message 单聊消息
      * @param serviceId 服务ID
      * @param toUser 接收人
-     * @param channelContext 连接上下文
+     * @param session 连接会话
      * @param encryptKey 加密密钥
      * @param waitResponse 是否等待回执
      * @param sendTimeout 发送超时时间
@@ -216,8 +217,8 @@ public class MqttManagerImpl implements MqttManager{
      *         如果waitResponse为false，默认返回true
      */
     @Override
-    public boolean sendSingleMessage(String message, String serviceId, String toUser, ChannelContext channelContext, String encryptKey,boolean waitResponse, int sendTimeout) throws IOException {
-        return send(message, ImPayloadType.SINGLE_CHAT.getCode(), channelContext, String.format(USER_MESSAGE_TOPIC, serviceId, toUser), encryptKey, waitResponse, sendTimeout);
+    public boolean sendSingleMessage(String message, String serviceId, String toUser, MqttSession session, String encryptKey,boolean waitResponse, int sendTimeout) throws IOException {
+        return send(message, ImPayloadType.SINGLE_CHAT.getCode(), session, String.format(USER_MESSAGE_TOPIC, serviceId, toUser), encryptKey, waitResponse, sendTimeout);
     }
 
     /**
@@ -225,7 +226,7 @@ public class MqttManagerImpl implements MqttManager{
      * @param message 消息内容
      * @param serviceId 服务ID
      * @param toDevice 接收设备ID
-     * @param channelContext 连接上下文
+     * @param session 连接会话
      * @param encryptKey 加密密钥
      * @param waitResponse 是否等待回执
      * @param sendTimeout 发送超时时间
@@ -233,8 +234,8 @@ public class MqttManagerImpl implements MqttManager{
      *         如果waitResponse为false，默认返回true
      */
     @Override
-    public boolean sendDeviceMessage(String message, String serviceId, String toDevice, ChannelContext channelContext, String encryptKey,boolean waitResponse, int sendTimeout) throws IOException {
-        return send(message, ImPayloadType.SINGLE_CHAT.getCode(), channelContext, String.format(DEVICE_MESSAGE_TOPIC, serviceId, toDevice), encryptKey, waitResponse, sendTimeout);
+    public boolean sendDeviceMessage(String message, String serviceId, String toDevice, MqttSession session, String encryptKey,boolean waitResponse, int sendTimeout) throws IOException {
+        return send(message, ImPayloadType.SINGLE_CHAT.getCode(), session, String.format(DEVICE_MESSAGE_TOPIC, serviceId, toDevice), encryptKey, waitResponse, sendTimeout);
     }
 
     /**
@@ -242,7 +243,7 @@ public class MqttManagerImpl implements MqttManager{
      * @param message 群消息内容
      * @param serviceId 服务ID
      * @param groupId 群ID
-     * @param channelContext 连接上下文
+     * @param session 连接会话
      * @param encryptKey 加密key
      * @param waitResponse 是否等待回执
      * @param sendTimeout 发送超时时间
@@ -250,8 +251,8 @@ public class MqttManagerImpl implements MqttManager{
      *         如果waitResponse为false，默认返回true
      */
     @Override
-    public boolean sendGroupMessage(String message, String serviceId, String groupId, ChannelContext channelContext, String encryptKey,boolean waitResponse, int sendTimeout) throws IOException {
-        return send(message, ImPayloadType.GROUP_CHAT.getCode(), channelContext, String.format(GROUP_MESSAGE_TOPIC, serviceId, groupId), encryptKey, waitResponse, sendTimeout);
+    public boolean sendGroupMessage(String message, String serviceId, String groupId, MqttSession session, String encryptKey,boolean waitResponse, int sendTimeout) throws IOException {
+        return send(message, ImPayloadType.GROUP_CHAT.getCode(), session, String.format(GROUP_MESSAGE_TOPIC, serviceId, groupId), encryptKey, waitResponse, sendTimeout);
     }
 
     /**
@@ -260,39 +261,62 @@ public class MqttManagerImpl implements MqttManager{
      * @param deviceId 设备ID
      * @param deviceType 设备类型
      * @param encryptKey 加密密钥
-     * @param channelContext 连接上下文
+     * @param session 连接会话
      */
     @Override
-    public void auth(String serviceId, String deviceId, String deviceType, String encryptKey, ChannelContext channelContext) throws IOException {
+    public void auth(String serviceId, String deviceId, String deviceType, String encryptKey, MqttSession session) throws IOException {
         //发送认证消息
         log.info("======> 发送认证消息,serviceId:{},deviceId:{},deviceType:{}", serviceId, deviceId, deviceType);
-        CherryMessage authMessage = MqttMessageFactory.createAuthMsg(deviceId, serviceId, deviceType, encryptKey);
-        doSendMessage(authMessage, channelContext);
+        String appId = "064145119";
+        long time = System.currentTimeMillis();
+        String password = appId + ";" + serviceId + ";" + deviceId
+                + ";" + deviceType + ";" + time;
+        byte[] passwordByte = SM4Util.encryptCBC(encryptKey, password.getBytes());
+        CherryMessage authMessage = messageFactory.createAuthMessage(serviceId, passwordByte);
+        doSendMessage(authMessage, session);
     }
 
     /**
      * 发送消息
      * @param message
-     * @param channelContext
+     * @param session
      */
-    private void doSendMessage(CherryMessage message, ChannelContext channelContext){
-        CherryMessageConverter<CherryPacket> converter = new CimioCherryMessageConverter();
-        CherryPacket packet = converter.convert(message);
-        Tio.send(channelContext, packet);
+    private void doSendMessage(CherryMessage message, MqttSession session){
+        // 发送消息到指定连接客户端
+        MqttMessage mqttMessage = messageConverter.convert(message);
+        if(session.getChannel() instanceof Channel){
+            ((Channel) session.getChannel()).writeAndFlush(mqttMessage).addListener((ChannelFutureListener) channelFuture -> {
+                if(!channelFuture.isSuccess()){
+                    log.error("消息发送失败，message:" + message, channelFuture.cause());
+                }
+            });
+        }else{
+            throw new UnsupportedOperationException("Unsupported channel!");
+        }
+    }
+
+    /**
+     * 发送消息
+     * @param message
+     * @param session
+     */
+    @Override
+    public void sendMessage(CherryMessage message, MqttSession session){
+        doSendMessage(message, session);
     }
 
     /**
      * 上线操作
      * @param serviceId 服务ID
      * @param userId 用户ID
-     * @param channelContext 连接上下文
+     * @param session 连接会话
      */
     @Override
-    public void online(String serviceId, String userId, ChannelContext channelContext) throws IOException {
+    public void online(String serviceId, String userId, MqttSession session) throws IOException {
         //发送上线消息
         log.info("======> 发送上线消息,serviceId:{},userId:{}", serviceId, userId);
-        CherryMessage onlineMessage = MqttMessageFactory.createSubscribeMsg(Sets.newHashSet(String.format(ONLINE_MESSAGE_TOPIC, serviceId,userId)));
-        doSendMessage(onlineMessage, channelContext);
+        CherryMessage onlineMessage = messageFactory.createSubcrebeMessage(Sets.newHashSet(String.format(ONLINE_MESSAGE_TOPIC, serviceId,userId)));
+        doSendMessage(onlineMessage, session);
     }
 
     private byte[] getReceiptData(int status) {
@@ -309,24 +333,24 @@ public class MqttManagerImpl implements MqttManager{
      * 发送消息
      * @param topic
      * @param payload
-     * @param channelContext
+     * @param session
      */
-    private void sendMessage(String topic, CherryMessagePayload payload, ChannelContext channelContext){
-        CherryMessage cherryMessage = MqttMessageFactory.createPublishMessage(topic, payload);
-        doSendMessage(cherryMessage, channelContext);
+    private void sendMessage(String topic, CherryMessagePayload payload, MqttSession session){
+        CherryMessage cherryMessage = messageFactory.createPublishMessage(topic, payload);
+        doSendMessage(cherryMessage, session);
     }
 
     /**
      * 接收消息
      * @param message
-     * @param channelContext 连接上下文
+     * @param session 连接会话
      * @return
      */
     @Override
-    public void receive(CherryMessage message, ChannelHandlerContext channelContext) throws IOException {
+    public void receive(CherryMessage message, MqttSession session) throws IOException {
         if (message.getCherryMessageType() == CherryMessageType.PUBLISH){
             //将消息放入到对应的连接会话的队列中
-            String sessionKey = getSessionKey(channelContext);
+            String sessionKey = getSessionKey(session);
             String secretKey = null;
             MqttSession mqttSession = null;
             if(sessionKey != null){
@@ -443,10 +467,15 @@ public class MqttManagerImpl implements MqttManager{
      * @return
      */
     @Override
-    public ChannelHandlerContext connect(String host, int port, int timeout) throws Exception {
-        ChannelFuture channelFuture = BOOTSTRAP.connect(host, port).sync();
-
-        return channelFuture.channel();
+    public MqttSession connect(String host, int port, int timeout) throws Exception {
+        ChannelFuture channelFuture = BOOTSTRAP
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, timeout)
+                .connect(host, port).sync();
+        Channel channel = channelFuture.channel();
+        MqttSession session = new MqttSession();
+        session.setChannel(channel);
+        session.setMessageQueue(new LinkedBlockingDeque());
+        return session;
     }
 
     /**
@@ -465,13 +494,14 @@ public class MqttManagerImpl implements MqttManager{
     public MqttSession getConnection(String host, int port, int timeout, String serviceId, String userId, String deviceId, String deviceType, String encryptKey, boolean needLogin){
         return SESSION_MAP.computeIfAbsent(getSessionKey(host, port, userId, deviceId), sessionKey -> {
             try {
-                ChannelContext channelContext = connect(host, port, timeout);
-                setSessionKey(channelContext, sessionKey);
-                auth(serviceId, deviceId, deviceType, encryptKey, channelContext);
+                MqttSession session = connect(host, port, timeout);
+                session.setSecretKey(encryptKey);
+                setSessionKey(session, sessionKey);
+                auth(serviceId, deviceId, deviceType, encryptKey, session);
                 if(needLogin){
-                    online(serviceId, userId, channelContext);
+                    online(serviceId, userId, session);
                 }
-                return new MqttSession(channelContext, new LinkedBlockingDeque(), encryptKey);
+                return session;
             } catch (Exception e) {
                 log.error("获取连接失败, userId:"+ userId + ",deviceId:" + deviceId, e);
                 return null;
@@ -480,30 +510,50 @@ public class MqttManagerImpl implements MqttManager{
     }
 
     /**
-     * 移除连接
-     * @param channelContext
+     * 获取连接会话
+     * @param sessionKey
+     * @return
      */
     @Override
-    public void removeConnection(ChannelContext channelContext){
-        String sessionKey = getSessionKey(channelContext);
+    public MqttSession getConnection(String sessionKey){
+        return SESSION_MAP.get(sessionKey);
+    }
+
+    /**
+     * 移除连接
+     * @param session
+     */
+    @Override
+    public void removeConnection(MqttSession session){
+        String sessionKey = getSessionKey(session);
         SESSION_MAP.remove(sessionKey);
     }
 
     /**
      * 获取sessionKey
-     * @param channelContext
+     * @param session
      * @return
      */
     @Override
-    public String getSessionKey(ChannelContext channelContext){
-        if(channelContext == null){
+    public String getSessionKey(MqttSession session){
+        if(session == null){
             return null;
         }
-        return (String) channelContext.get(SESSION_KEY);
+        if(session.getChannel() instanceof Channel){
+            Channel channel = (Channel) session.getChannel();
+            return (String) channel.attr(AttributeKey.valueOf(SESSION_KEY)).get();
+        }else{
+            throw new UnsupportedOperationException("Unsupported channel!");
+        }
     }
 
-    private void setSessionKey(ChannelContext channelContext, String sessionKey){
-        channelContext.set(SESSION_KEY, sessionKey);
+    private void setSessionKey(MqttSession session, String sessionKey){
+        if(session.getChannel() instanceof Channel){
+            Channel channel = (Channel) session.getChannel();
+            channel.attr(AttributeKey.valueOf(SESSION_KEY)).set(sessionKey);
+        }else{
+            throw new UnsupportedOperationException("Unsupported channel!");
+        }
     }
 
     /**
@@ -530,8 +580,18 @@ public class MqttManagerImpl implements MqttManager{
         synchronized (SESSION_MAP){
             if(!SESSION_MAP.isEmpty()){
                 for(MqttSession session : SESSION_MAP.values()){
-                    ChannelContext channelContext = session.getChannelContext();
-                    channelContext.setClosed(true);
+                    if(session.getChannel() instanceof Channel){
+                        Channel channel = (Channel) session.getChannel();
+                        channel.close().addListener(future -> {
+                            if(future.isSuccess()){
+                                log.info("======> channelId:[{}]关闭成功！", channel.id().asLongText());
+                            }else{
+                                log.error("###### channelId:["+ channel.id().asLongText() +"]关闭成功！", future.cause());
+                            }
+                        });
+                    }else{
+                        throw new UnsupportedOperationException("Unsupported channel!");
+                    }
                 }
                 SESSION_MAP.clear();
             }

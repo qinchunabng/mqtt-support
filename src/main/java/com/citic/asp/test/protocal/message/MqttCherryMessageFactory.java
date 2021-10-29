@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * <dl>mqtt消息工厂
@@ -22,10 +23,13 @@ import java.util.Set;
  *
  * @author maoyx
  */
-@Component
 public class MqttCherryMessageFactory implements CherryMessageFactory {
-    @Autowired
+
     private CherryMessagePayloadCodec cherryMessagePayloadCodec;
+
+    public MqttCherryMessageFactory(){
+        cherryMessagePayloadCodec = new CmcPayloadCodec();
+    }
 
     @Override
     public CherryMessage createAuthMessage(String serviceId, byte[] token) {
@@ -34,6 +38,7 @@ public class MqttCherryMessageFactory implements CherryMessageFactory {
                 .hasUser(true)
                 .username(serviceId)
                 .password(token)
+                .clientId(UUID.randomUUID().toString())
                 .build());
     }
 
@@ -58,7 +63,8 @@ public class MqttCherryMessageFactory implements CherryMessageFactory {
 
     @Override
     public CherryMessage createSubcrebeMessage(Set<String> topics) {
-        MqttMessageBuilders.SubscribeBuilder builder = MqttMessageBuilders.subscribe();
+        MqttMessageBuilders.SubscribeBuilder builder = MqttMessageBuilders.subscribe()
+                .messageId(1);
         for (String topic : topics) {
             builder.addSubscription(MqttQoS.AT_MOST_ONCE, topic);
         }

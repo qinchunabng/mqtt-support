@@ -5,9 +5,7 @@ import com.citic.asp.cmc.core.message.CherryMessageConverter;
 import com.citic.asp.cmc.core.message.CherryMessageFactory;
 import com.citic.asp.test.protocal.message.CimioCherryMessageConverter;
 import com.citic.asp.test.protocal.message.MqttCherryMessageFactory;
-import io.netty.channel.ChannelHandler;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.channel.*;
 import io.netty.handler.codec.mqtt.MqttMessage;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
@@ -46,8 +44,21 @@ public class ClientHandler extends SimpleChannelInboundHandler<MqttMessage> {
             IdleStateEvent idleStateEvent = (IdleStateEvent) evt;
             if(idleStateEvent.state() == IdleState.WRITER_IDLE){
                 //发送心跳消息
+//                logger.info("######### 发送心跳消息，channelId:{}", ctx.channel().id().asLongText());
                 CherryMessage pingMessage = messageFactory.createPingMessage();
-                ctx.writeAndFlush(pingMessage);
+                MqttMessage mqttMessage = cherryMessageConverter.convert(pingMessage);
+                ctx.writeAndFlush(mqttMessage).addListener((ChannelFutureListener) channelFuture -> {
+                    if(!channelFuture.isSuccess()){
+                        logger.error("发送心跳消息失败, message: " + pingMessage, channelFuture.cause());
+                    }
+                });
+//                String sessionKey = mqttManager.getSessionKey(new MqttSession(ctx.channel()));
+//                MqttSession session = mqttManager.getConnection(sessionKey);
+//                if(session == null){
+//                    logger.warn("无法获取对应session");
+//                    return;
+//                }
+//                mqttManager.sendMessage(pingMessage, session);
             }
         }
         super.userEventTriggered(ctx, evt);
@@ -56,17 +67,21 @@ public class ClientHandler extends SimpleChannelInboundHandler<MqttMessage> {
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
         logger.error("ClientHandler#exceptionCaught", cause);
+        if(ctx.channel().isActive()){
+            ctx.close();
+        }
     }
 
     @Override
     public void handlerRemoved(ChannelHandlerContext ctx) throws Exception {
-
+        logger.info("====== 连接断开,channelId:{}", ctx.channel().id().asLongText());
+        mqttManager.removeConnection(new MqttSession(ctx.channel()));
     }
 
 
     @Override
     protected void channelRead0(ChannelHandlerContext channelHandlerContext, MqttMessage mqttMessage) throws Exception {
         CherryMessage cherryMessage = cherryMessageConverter.convert(mqttMessage);
-        mqttManager.receive(cherryMessage, channelHandlerContext);
+        mqttManager.receive(cherryMessage, new MqttSession(channelHandlerContext.channel()));
     }
 }

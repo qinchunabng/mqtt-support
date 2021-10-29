@@ -1,8 +1,9 @@
 package com.citic.asp.test.sampler;
 
-import com.alibaba.fastjson.JSON;
 import com.citic.asp.test.loader.Account;
-import com.citic.asp.test.protocal.*;
+import com.citic.asp.test.protocal.MessageType;
+import com.citic.asp.test.protocal.MqttSession;
+import com.citic.asp.test.protocal.SingleMessage;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.jmeter.config.Arguments;
 import org.apache.jmeter.protocol.java.sampler.JavaSamplerContext;
@@ -131,11 +132,11 @@ public class MqttSenderSampler extends AbstractMqttSampler {
 //                TimeUnit.MILLISECONDS.sleep(50);
                 //判断是否发设备消息
                 boolean success = true;
-                log.info("===========> 发送单聊消息,session:{}, sessionKey:{}", session, mqttManager.getSessionKey(session.getChannelContext()));
+                log.info("===========> 发送单聊消息,session:{}, sessionKey:{}", session, mqttManager.getSessionKey(session));
                 if(sendDeviceMessage){
-                    success = sender.sendDeviceMessage(message, mqttConfig.getServiceId(), toDevice, session.getChannelContext(), mqttConfig.getEncryptKey(), waitResponse, sendTimeout);
+                    success = sender.sendDeviceMessage(message, mqttConfig.getServiceId(), toDevice, session, mqttConfig.getEncryptKey(), waitResponse, sendTimeout);
                 }else{
-                    success = sender.sendSingleMessage(message, mqttConfig.getServiceId(), toUser, session.getChannelContext(), mqttConfig.getEncryptKey(), waitResponse, sendTimeout);
+                    success = sender.sendSingleMessage(message, mqttConfig.getServiceId(), toUser, session, mqttConfig.getEncryptKey(), waitResponse, sendTimeout);
                 }
 
                 //判断消息是否发送成功

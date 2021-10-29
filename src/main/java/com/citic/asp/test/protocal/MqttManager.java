@@ -1,8 +1,8 @@
 package com.citic.asp.test.protocal;
 
 import com.citic.asp.cmc.core.message.CherryMessage;
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
-import org.tio.core.ChannelContext;
 
 import java.io.IOException;
 
@@ -30,17 +30,24 @@ public interface MqttManager extends MessageSender, MessageReceiver{
     MqttSession getConnection(String host, int port, int timeout, String serviceId, String userId, String deviceId, String deviceType, String encryptKey, boolean needLogin);
 
     /**
-     * 移除连接
-     * @param channelContext
+     * 获取连接会话
+     * @param sessionKey
+     * @return
      */
-    void removeConnection(ChannelContext channelContext);
+    MqttSession getConnection(String sessionKey);
+
+    /**
+     * 移除连接
+     * @param session
+     */
+    void removeConnection(MqttSession session);
 
     /**
      * 获取sessionKey
-     * @param channelContext
+     * @param session
      * @return
      */
-    String getSessionKey(ChannelContext channelContext);
+    String getSessionKey(MqttSession session);
 
     /**
      * 获取sessionKey
@@ -55,10 +62,10 @@ public interface MqttManager extends MessageSender, MessageReceiver{
     /**
      * 接收消息
      * @param cherryMessage
-     * @param channelContext 连接上下文
+     * @param session 连接会话
      * @return
      */
-    void receive(CherryMessage cherryMessage, ChannelHandlerContext channelContext) throws IOException;
+    void receive(CherryMessage cherryMessage, MqttSession session) throws IOException;
 
     /**
      * 释放所有的连接

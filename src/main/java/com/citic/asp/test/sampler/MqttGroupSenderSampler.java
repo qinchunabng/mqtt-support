@@ -120,7 +120,7 @@ public class MqttGroupSenderSampler extends AbstractMqttSampler{
                     .build();
             String message = JSON.toJSONString(groupMessage);
             try{
-                boolean success = sender.sendGroupMessage(message, mqttConfig.getServiceId(), groupId, session.getChannelContext(), mqttConfig.getEncryptKey(), waitResponse, sendTimeout);
+                boolean success = sender.sendGroupMessage(message, mqttConfig.getServiceId(), groupId, session, mqttConfig.getEncryptKey(), waitResponse, sendTimeout);
                 //判断是否发送成功
                 if(success){
                     sampleResultSuccess(result, "OK");
@@ -156,21 +156,21 @@ public class MqttGroupSenderSampler extends AbstractMqttSampler{
 
     @Override
     public void initConnection() {
-//        if(first){
-//            synchronized (initialLock) {
-//                if (first && SEND_ACCOUNTS != null && SEND_ACCOUNTS.size() > 0) {
-//                    for (Account account : SEND_ACCOUNTS) {
-//                        GROUP_SENDER_THREAD_POOL.execute(() -> {
-//                            mqttManager.getConnection(getMqttConfig().getHost(), getMqttConfig().getPort(), getMqttConfig().getConnectTimeout(),
-//                                    getMqttConfig().getServiceId(), account.getUsername(), account.getDeviceId(), account.getDeviceType(), getMqttConfig().getEncryptKey(),
-//                                    getMqttConfig().isNeedLogin());
-//                            log.info("=====> 创建连接:{}", account);
-//                        });
-//                    }
-//                }
-//                first = false;
-//            }
-//        }
+        if(first){
+            synchronized (initialLock) {
+                if (first && SEND_ACCOUNTS != null && SEND_ACCOUNTS.size() > 0) {
+                    for (Account account : SEND_ACCOUNTS) {
+                        GROUP_SENDER_THREAD_POOL.execute(() -> {
+                            mqttManager.getConnection(getMqttConfig().getHost(), getMqttConfig().getPort(), getMqttConfig().getConnectTimeout(),
+                                    getMqttConfig().getServiceId(), account.getUsername(), account.getDeviceId(), account.getDeviceType(), getMqttConfig().getEncryptKey(),
+                                    getMqttConfig().isNeedLogin());
+                            log.info("=====> 创建连接:{}", account);
+                        });
+                    }
+                }
+                first = false;
+            }
+        }
     }
 
     @Override
